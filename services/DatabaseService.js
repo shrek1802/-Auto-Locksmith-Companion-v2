@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 
 import {
+  BUNDLED_DATABASES,
   BUNDLED_MANIFEST,
   DATABASE_DIRECTORY_NAME,
   LOCAL_MANIFEST_FILE_NAME,
@@ -12,10 +13,6 @@ const DATABASE_DIRECTORY =
 
 const LOCAL_MANIFEST_PATH =
   `${DATABASE_DIRECTORY}${LOCAL_MANIFEST_FILE_NAME}`;
-
-const BUNDLED_DATABASE_FILES = {
-  ford: require('../data/bundled/ford.json'),
-};
 
 export async function initialiseDatabase() {
   await ensureDatabaseDirectory();
@@ -347,7 +344,7 @@ async function installBundledDatabase() {
   for (const [
     manufacturerId,
     manufacturerData,
-  ] of Object.entries(BUNDLED_DATABASE_FILES)) {
+  ] of Object.entries(BUNDLED_DATABASES)) {
     validateManufacturerDatabase(
       manufacturerData,
       manufacturerId
