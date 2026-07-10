@@ -1,19 +1,32 @@
 name: Build Android APK
+
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
+  workflow_d:contentReference[oaicite:0]{index=0} main
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
-      - run: npm run check
-      - run: npm install -g eas-cli
-      - run: eas build --platform android --profile preview --non-interactive
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Validate database files
+        run: npm run check
+
+      - name: Install EAS CLI
+        run: npm install --global eas-cli
+
+      - name: Build Android APK
+        run: eas build --platform android --profile preview --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
