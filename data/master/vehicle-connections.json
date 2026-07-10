@@ -1,0 +1,10 @@
+{
+  "schema_version":"1.0",
+  "connections":[
+    {"id":"FCA_12_8","name":"FCA 12+8 SGW bypass cable","type":"gateway_bypass","uk_relevant":true},
+    {"id":"TOYOTA_CANFD_30PIN","name":"Toyota/Lexus 30-pin CAN FD cable","type":"canfd_adapter","uk_relevant":true},
+    {"id":"NISSAN_40PIN_BCM","name":"Nissan 40-pin BCM cable","type":"bcm_adapter","uk_relevant":true},
+    {"id":"NISSAN_16_32_GATEWAY","name":"Nissan 16+32 gateway cable","type":"gateway_adapter","uk_relevant":true},
+    {"id":"RENAULT_GATEWAY","name":"Renault gateway cable","type":"gateway_adapter","uk_relevant":true}
+  ]
+}

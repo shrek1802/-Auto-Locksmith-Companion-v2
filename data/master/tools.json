@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "tools": [
+    {"id":"autel_im508s_xp400_pro","name":"Autel IM508S + XP400 Pro","short_name":"IM508S","manufacturer":"Autel"},
+    {"id":"autel_im608_pro","name":"Autel IM608 Pro","short_name":"IM608 Pro","manufacturer":"Autel"},
+    {"id":"keydiy_kd_x4","name":"KEYDIY KD-X4","short_name":"KD-X4","manufacturer":"KEYDIY"},
+    {"id":"xhorse_key_tool_plus","name":"Xhorse Key Tool Plus","short_name":"Key Tool Plus","manufacturer":"Xhorse"},
+    {"id":"xhorse_vvdi2","name":"Xhorse VVDI2","short_name":"VVDI2","manufacturer":"Xhorse"},
+    {"id":"obdstar_x300_dp_plus","name":"OBDSTAR X300 DP Plus","short_name":"OBDSTAR","manufacturer":"OBDSTAR"},
+    {"id":"xtool_x100_pad3","name":"Xtool X100 PAD3","short_name":"X100 PAD3","manufacturer":"Xtool"},
+    {"id":"lonsdor_k518","name":"Lonsdor K518","short_name":"K518","manufacturer":"Lonsdor"}
+  ]
+}

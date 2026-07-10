@@ -1,0 +1,141 @@
+{
+  "schema_version": "2.0",
+  "manufacturer": {
+    "id": "ford",
+    "name": "Ford"
+  },
+  "vehicles": [
+    {
+      "record_id": "ford-fiesta-2015-2020-uk",
+      "vehicle": {
+        "make": "Ford",
+        "model": "Fiesta",
+        "variant": "",
+        "year_from": 2015,
+        "year_to": 2020,
+        "market": "UK",
+        "drive_side": "RHD"
+      },
+      "vehicle_information": {
+        "immobiliser_system": "PATS",
+        "transponder_type": "ID49",
+        "frequency_mhz": 433,
+        "blade_profile": "HU101",
+        "key_type": "Remote key / smart key depending on variant",
+        "notes": "Example starter record. Verify exact variant before use."
+      },
+      "operations": {
+        "add_key": {
+          "display_name": "Add Key",
+          "overall_status": "supported",
+          "summary": "Spare-key programming with a working key.",
+          "tools": {
+            "autel_im508s_xp400_pro": {
+              "status": "supported",
+              "method": "obd",
+              "internet_required": true,
+              "working_key_required": true,
+              "vehicle_connection_ids": [],
+              "tool_accessory_ids": [],
+              "online_requirement_ids": [],
+              "estimated_minutes": {
+                "minimum": 15,
+                "typical": 20,
+                "maximum": 30
+              },
+              "notes": "Works over OBD. Internet connection required."
+            },
+            "autel_im608_pro": {
+              "status": "supported",
+              "method": "obd",
+              "internet_required": true,
+              "working_key_required": true,
+              "vehicle_connection_ids": [],
+              "tool_accessory_ids": [],
+              "online_requirement_ids": [],
+              "estimated_minutes": {
+                "minimum": 15,
+                "typical": 20,
+                "maximum": 30
+              },
+              "notes": "Works over OBD. Internet connection required."
+            },
+            "keydiy_kd_x4": {
+              "status": "not_supported",
+              "reason": "Not compatible for immobiliser programming on this vehicle record."
+            },
+            "xhorse_key_tool_plus": {
+              "status": "unknown",
+              "reason": "Compatibility has not yet been verified."
+            }
+          }
+        },
+        "all_keys_lost": {
+          "display_name": "All Keys Lost",
+          "overall_status": "supported",
+          "summary": "Programming when no working key is available.",
+          "tools": {
+            "autel_im508s_xp400_pro": {
+              "status": "supported",
+              "method": "obd",
+              "internet_required": true,
+              "working_key_required": false,
+              "vehicle_connection_ids": [],
+              "tool_accessory_ids": [],
+              "online_requirement_ids": [],
+              "estimated_minutes": {
+                "minimum": 25,
+                "typical": 35,
+                "maximum": 50
+              },
+              "warnings": [
+                "Use stable battery support."
+              ],
+              "notes": "Works over OBD. Internet connection required."
+            },
+            "autel_im608_pro": {
+              "status": "supported",
+              "method": "obd",
+              "internet_required": true,
+              "working_key_required": false,
+              "vehicle_connection_ids": [],
+              "tool_accessory_ids": [],
+              "online_requirement_ids": [],
+              "estimated_minutes": {
+                "minimum": 25,
+                "typical": 35,
+                "maximum": 50
+              },
+              "warnings": [
+                "Use stable battery support."
+              ],
+              "notes": "Works over OBD. Internet connection required."
+            },
+            "keydiy_kd_x4": {
+              "status": "not_supported",
+              "reason": "Not compatible for all-keys-lost programming on this vehicle record."
+            },
+            "xhorse_key_tool_plus": {
+              "status": "unknown",
+              "reason": "Compatibility has not yet been verified."
+            }
+          }
+        }
+      },
+      "locations": {
+        "obd_port": {
+          "location": "Driver footwell area",
+          "rhd_notes": "UK RHD location. Add a verified image before release.",
+          "images": []
+        }
+      },
+      "verification": {
+        "status": "example_only",
+        "confidence": "low",
+        "last_verified": null,
+        "sources": [],
+        "notes": "Replace this example with verified workshop data."
+      }
+    }
+  ]
+}

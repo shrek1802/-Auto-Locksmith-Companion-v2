@@ -1,0 +1,10 @@
+{
+  "schema_version":"1.0",
+  "requirements":[
+    {"id":"VAG_SFD","name":"VAG SFD authentication","uk_relevant":true},
+    {"id":"FORD_FDRS","name":"Ford FDRS access","uk_relevant":true},
+    {"id":"BMW_AOS","name":"BMW AOS access","uk_relevant":true},
+    {"id":"MERCEDES_XENTRY","name":"Mercedes-Benz Xentry access","uk_relevant":true},
+    {"id":"TOYOTA_TECHDOC","name":"Toyota TechDoc security access","uk_relevant":true}
+  ]
+}

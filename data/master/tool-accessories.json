@@ -1,0 +1,10 @@
+{
+  "schema_version":"1.0",
+  "accessories":[
+    {"id":"XP400_PRO","name":"XP400 Pro"},
+    {"id":"APB112","name":"APB112 smart key simulator"},
+    {"id":"APB131","name":"APB131 adapter"},
+    {"id":"GBOX2","name":"Autel G-BOX2"},
+    {"id":"GBOX3","name":"Autel G-BOX3"}
+  ]
+}
