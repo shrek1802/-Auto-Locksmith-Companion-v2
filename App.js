@@ -1,41 +1,94 @@
 import 'react-native-gesture-handler';
+
 import React from 'react';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
+import {
+  DarkTheme,
+  NavigationContainer,
+} from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
+import { DatabaseProvider } from './context/DatabaseContext';
+
 import ManufacturersScreen from './screens/ManufacturersScreen';
 import ModelsScreen from './screens/ModelsScreen';
 import VehicleScreen from './screens/VehicleScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import { DatabaseProvider } from './context/DatabaseContext';
 
 const Stack = createNativeStackNavigator();
-const theme = {
+
+const navigationTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    background: '#0B1220',
-    card: '#0B1220',
-    border: '#253047',
-    text: '#F8FAFC',
     primary: '#60A5FA',
+    background: '#0B1220',
+    card: '#111827',
+    text: '#F8FAFC',
+    border: '#253047',
+    notification: '#EF4444',
+  },
+};
+
+const screenOptions = {
+  headerStyle: {
+    backgroundColor: '#111827',
+  },
+  headerTintColor: '#F8FAFC',
+  headerTitleStyle: {
+    fontWeight: '800',
+  },
+  headerShadowVisible: false,
+  contentStyle: {
+    backgroundColor: '#0B1220',
   },
 };
 
 export default function App() {
   return (
     <DatabaseProvider>
-      <NavigationContainer theme={theme}>
+      <NavigationContainer theme={navigationTheme}>
         <StatusBar style="light" />
-        <Stack.Navigator screenOptions={{
-          headerStyle: { backgroundColor: '#0B1220' },
-          headerTintColor: '#F8FAFC',
-          headerTitleStyle: { fontWeight: '800' },
-        }}>
-          <Stack.Screen name="Manufacturers" component={ManufacturersScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="Models" component={ModelsScreen} options={({ route }) => ({ title: route.params.manufacturer.name })} />
-          <Stack.Screen name="Vehicle" component={VehicleScreen} options={({ route }) => ({ title: `${route.params.record.vehicle.make} ${route.params.record.vehicle.model}` })} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
+
+        <Stack.Navigator screenOptions={screenOptions}>
+          <Stack.Screen
+            name="Manufacturers"
+            component={ManufacturersScreen}
+            options={{
+              title: 'Locksmith Companion Pro',
+              headerShown: false,
+            }}
+          />
+
+          <Stack.Screen
+            name="Models"
+            component={ModelsScreen}
+            options={({ route }) => ({
+              title: route.params?.manufacturer?.name || 'Models',
+            })}
+          />
+
+          <Stack.Screen
+            name="Vehicle"
+            component={VehicleScreen}
+            options={({ route }) => {
+              const vehicle = route.params?.record?.vehicle;
+
+              return {
+                title: vehicle
+                  ? `${vehicle.make} ${vehicle.model}`
+                  : 'Vehicle details',
+              };
+            }}
+          />
+
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={{
+              title: 'Settings',
+            }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </DatabaseProvider>
