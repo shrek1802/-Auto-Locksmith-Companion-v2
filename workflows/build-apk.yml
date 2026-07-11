@@ -1,7 +1,10 @@
 name: Build Android APK
 
 on:
-  workflow_d:contentReference[oaicite:0]{index=0} main
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
