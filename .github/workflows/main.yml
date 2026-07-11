@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -29,7 +30,9 @@ jobs:
         run: npm install
 
       - name: Align Expo SDK dependencies
-        run: npx expo install --fix
+        run: |
+          npx expo install --fix
+          npx expo install expo-font
 
       - name: Check Expo project
         run: npx expo-doctor
@@ -47,42 +50,17 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
-      - name: Rename APK
+      - name: Prepare APK
         run: |
           mkdir -p output
           cp android/app/build/outputs/apk/release/app-release.apk \
-             output/Locksmith-Companion-Pro-v2.0.0.apk
+            output/Locksmith-Companion-Pro-v2.0.0-build-${{ github.run_number }}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Locksmith-Companion-Pro-v2.0.0
-          path: output/Locksmith-Companion-Pro-v2.0.0.apk
+          name: Locksmith-Companion-Pro-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/Locksmith-Companion-Pro-v2.0.0-build-${{ github.run_number }}.apk
           if-no-files-found: error
-          retention-days: 30
-      - name: Validate database files
-        run: npm run check
-
-      - name: Generate Android project
-        run: CI=1 npx expo prebuild --platform android --clean
-
-      - name: Make Gradle executable
-        run: chmod +x android/gradlew
-
-      - name: Build release APK
-        working-directory: android
-        run: ./gradlew assembleRelease
-
-      - name: Rename APK
-        run: |
-          mkdir -p output
-          cp android/app/build/outputs/apk/release/app-release.apk \
-             output/Locksmith-Companion-Pro-v2.0.0.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Locksmith-Companion-Pro-v2.0.0
-          path: output/Locksmith-Companion-Pro-v2.0.0.apk
-          if-no-files-found: error
+          overwrite: true
           retention-days: 30
