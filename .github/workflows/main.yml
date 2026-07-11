@@ -6,8 +6,12 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -19,16 +23,41 @@ jobs:
         with:
           node-version: 20
 
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Install dependencies
         run: npm install
 
       - name: Validate database files
         run: npm run check
 
-      - name: Install EAS CLI
-        run: npm install --global eas-cli
+      - name: Generate Android project
+        run: CI=1 npx expo prebuild --platform android --clean
 
-      - name: Build Android APK
-        run: eas build --platform android --profile preview --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Make Gradle executable
+        run: chmod +x android/gradlew
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+
+      - name: Rename APK
+        run: |
+          mkdir -p output
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             output/Locksmith-Companion-Pro-v2.0.0.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Locksmith-Companion-Pro-v2.0.0
+          path: output/Locksmith-Companion-Pro-v2.0.0.apk
+          if-no-files-found: error
+          retention-days: 30
