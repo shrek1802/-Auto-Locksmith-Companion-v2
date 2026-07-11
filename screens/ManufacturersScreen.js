@@ -4,12 +4,13 @@ import {
   Alert,
   FlatList,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BrandLogo from '../components/BrandLogo';
 import { useDatabase } from '../context/DatabaseContext';
@@ -27,8 +28,10 @@ export default function ManufacturersScreen({ navigation }) {
   const [search, setSearch] = useState('');
 
   const manufacturers = useMemo(() => {
-    const items = Object.entries(byManufacturer || {}).map(
-      ([manufacturerId, manufacturerData]) => ({
+    const query = search.trim().toLowerCase();
+
+    return Object.entries(byManufacturer || {})
+      .map(([manufacturerId, manufacturerData]) => ({
         id: manufacturerId,
         name:
           manufacturerData?.manufacturer?.name ||
@@ -37,37 +40,40 @@ export default function ManufacturersScreen({ navigation }) {
         recordCount: Array.isArray(manufacturerData?.records)
           ? manufacturerData.records.length
           : 0,
-      })
-    );
-
-    const query = search.trim().toLowerCase();
-
-    return items
-      .filter((item) => item.name.toLowerCase().includes(query))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      }))
+      .filter((manufacturer) =>
+        manufacturer.name.toLowerCase().includes(query)
+      )
+      .sort((first, second) =>
+        first.name.localeCompare(second.name)
+      );
   }, [byManufacturer, search]);
 
   async function handleDatabaseUpdate() {
-    clearError();
+    clearError?.();
 
     try {
       const result = await updateDatabase();
 
       if (result.upToDate) {
-        Alert.alert('Database update', 'The database is already up to date.');
+        Alert.alert(
+          'Database',
+          'The database is already up to date.'
+        );
         return;
       }
 
       Alert.alert(
         'Database updated',
-        result.updatedBrands.length
+        result.updatedBrands?.length
           ? `Updated manufacturers:\n\n${result.updatedBrands.join('\n')}`
           : 'The database was updated successfully.'
       );
     } catch (updateError) {
       Alert.alert(
         'Update failed',
-        updateError?.message || 'The database update could not be completed.'
+        updateError?.message ||
+          'The database update could not be completed.'
       );
     }
   }
@@ -81,92 +87,188 @@ export default function ManufacturersScreen({ navigation }) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.loadingText}>Loading vehicle database...</Text>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#60A5FA" />
+          <Text style={styles.loadingText}>
+            Loading saved database…
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView
+      style={styles.safeArea}
+      edges={['top', 'left', 'right']}
+    >
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Locksmith Companion Pro</Text>
-          <Text style={styles.subtitle}>UK vehicle key information</Text>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>
+            Locksmith Companion Pro
+          </Text>
+
+          <Text style={styles.subtitle}>
+            UK vehicle key information
+          </Text>
         </View>
 
         <Pressable
-          style={styles.settingsButton}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings"
+          hitSlop={12}
+          style={({ pressed }) => [
+            styles.settingsButton,
+            pressed && styles.buttonPressed,
+          ]}
           onPress={() => navigation.navigate('Settings')}
         >
-          <Text style={styles.settingsButtonText}>Settings</Text>
+          <Ionicons
+            name="settings-outline"
+            size={25}
+            color="#F8FAFC"
+          />
         </Pressable>
       </View>
 
-      <View style={styles.actions}>
-        <Pressable
-          style={[styles.updateButton, updating && styles.disabledButton]}
-          onPress={handleDatabaseUpdate}
-          disabled={updating}
-        >
-          {updating ? (
-            <ActivityIndicator />
-          ) : (
-            <Text style={styles.updateButtonText}>Check database updates</Text>
-          )}
-        </Pressable>
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.updateButton,
+          updating && styles.disabledButton,
+          pressed && !updating && styles.buttonPressed,
+        ]}
+        disabled={updating}
+        onPress={handleDatabaseUpdate}
+      >
+        {updating ? (
+          <View style={styles.updateContent}>
+            <ActivityIndicator
+              size="small"
+              color="#FFFFFF"
+            />
+            <Text style={styles.updateButtonText}>
+              Checking for updates…
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.updateContent}>
+            <Ionicons
+              name="cloud-download-outline"
+              size={22}
+              color="#FFFFFF"
+            />
+            <Text style={styles.updateButtonText}>
+              Check database updates
+            </Text>
+          </View>
+        )}
+      </Pressable>
 
       {error ? (
-        <Pressable style={styles.errorBox} onPress={clearError}>
+        <Pressable
+          style={styles.errorBox}
+          onPress={clearError}
+        >
           <Text style={styles.errorText}>{error}</Text>
-          <Text style={styles.errorDismiss}>Tap to dismiss</Text>
+          <Text style={styles.errorDismiss}>
+            Tap to dismiss
+          </Text>
         </Pressable>
       ) : null}
 
-      <TextInput
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Search manufacturer"
-        placeholderTextColor="#64748B"
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={styles.searchInput}
-      />
+      <View style={styles.searchBox}>
+        <Ionicons
+          name="search-outline"
+          size={21}
+          color="#64748B"
+        />
+
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search manufacturer"
+          placeholderTextColor="#64748B"
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          style={styles.searchInput}
+        />
+
+        {search.length > 0 ? (
+          <Pressable
+            accessibilityLabel="Clear search"
+            hitSlop={10}
+            onPress={() => setSearch('')}
+          >
+            <Ionicons
+              name="close-circle"
+              size={21}
+              color="#64748B"
+            />
+          </Pressable>
+        ) : null}
+      </View>
 
       <FlatList
         data={manufacturers}
         keyExtractor={(item) => item.id}
         numColumns={2}
-        contentContainerStyle={styles.listContent}
-        columnWrapperStyle={styles.column}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.listContent,
+          manufacturers.length === 1 &&
+            styles.singleItemList,
+        ]}
+        columnWrapperStyle={
+          manufacturers.length > 1
+            ? styles.columnWrapper
+            : undefined
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No manufacturers found</Text>
+            <Ionicons
+              name="car-sport-outline"
+              size={48}
+              color="#334155"
+            />
+
+            <Text style={styles.emptyTitle}>
+              No manufacturers found
+            </Text>
+
             <Text style={styles.emptyText}>
-              Add manufacturer JSON files to the database or try another search.
+              Add manufacturer JSON files to the database or try another
+              search.
             </Text>
           </View>
         }
         renderItem={({ item }) => (
           <Pressable
+            accessibilityRole="button"
             style={({ pressed }) => [
-              styles.card,
+              styles.manufacturerCard,
+              manufacturers.length === 1 &&
+                styles.singleManufacturerCard,
               pressed && styles.cardPressed,
             ]}
             onPress={() => openManufacturer(item)}
           >
-            <BrandLogo brand={item.name} size={54} />
+            <BrandLogo
+              brand={item.name}
+              size={62}
+            />
 
-            <Text style={styles.cardTitle}>{item.name}</Text>
+            <Text style={styles.manufacturerName}>
+              {item.name}
+            </Text>
 
-            <Text style={styles.cardMeta}>
-              {item.recordCount} vehicle
-              {item.recordCount === 1 ? '' : 's'}
+            <Text style={styles.vehicleCount}>
+              {item.recordCount}{' '}
+              {item.recordCount === 1
+                ? 'vehicle'
+                : 'vehicles'}
             </Text>
           </Pressable>
         )}
@@ -180,137 +282,202 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0B1220',
   },
+
   header: {
+    minHeight: 78,
     paddingHorizontal: 18,
-    paddingTop: 18,
+    paddingTop: 10,
     paddingBottom: 12,
     flexDirection: 'row',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    alignItems: 'center',
   },
+
+  headerText: {
+    flex: 1,
+    paddingRight: 12,
+  },
+
   title: {
     color: '#F8FAFC',
-    fontSize: 24,
+    fontSize: 26,
+    lineHeight: 32,
     fontWeight: '900',
   },
+
   subtitle: {
     color: '#94A3B8',
+    fontSize: 15,
     marginTop: 3,
   },
+
   settingsButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     backgroundColor: '#1E293B',
-    borderRadius: 10,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-  },
-  settingsButtonText: {
-    color: '#F8FAFC',
-    fontWeight: '700',
-  },
-  actions: {
-    paddingHorizontal: 18,
-    paddingBottom: 12,
-  },
-  updateButton: {
-    minHeight: 46,
-    borderRadius: 12,
-    backgroundColor: '#2563EB',
-    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#334155',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
+
+  updateButton: {
+    minHeight: 58,
+    marginHorizontal: 18,
+    marginBottom: 16,
+    borderRadius: 16,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+
+  updateContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+
+  updateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+
   disabledButton: {
     opacity: 0.65,
   },
-  updateButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
+
+  buttonPressed: {
+    opacity: 0.78,
   },
+
   errorBox: {
     marginHorizontal: 18,
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 10,
+    marginBottom: 14,
+    padding: 14,
+    borderRadius: 13,
     backgroundColor: '#451A1A',
     borderWidth: 1,
-    borderColor: '#7F1D1D',
+    borderColor: '#991B1B',
   },
+
   errorText: {
     color: '#FECACA',
+    fontSize: 15,
     fontWeight: '700',
   },
+
   errorDismiss: {
     color: '#FCA5A5',
-    marginTop: 4,
-    fontSize: 12,
-  },
-  searchInput: {
-    marginHorizontal: 18,
-    marginBottom: 14,
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#253047',
-    color: '#F8FAFC',
-    paddingHorizontal: 14,
-  },
-  listContent: {
-    paddingHorizontal: 12,
-    paddingBottom: 24,
-  },
-  column: {
-    gap: 10,
-  },
-  card: {
-    flex: 1,
-    minHeight: 140,
-    margin: 5,
-    borderRadius: 16,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#253047',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 14,
-  },
-  cardPressed: {
-    opacity: 0.75,
-  },
-  cardTitle: {
-    color: '#F8FAFC',
-    fontSize: 17,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginTop: 12,
-  },
-  cardMeta: {
-    color: '#94A3B8',
-    fontSize: 12,
     marginTop: 5,
   },
-  emptyState: {
-    padding: 30,
+
+  searchBox: {
+    minHeight: 54,
+    marginHorizontal: 18,
+    marginBottom: 17,
+    paddingHorizontal: 14,
+    borderRadius: 15,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#253047',
+    flexDirection: 'row',
     alignItems: 'center',
   },
+
+  searchInput: {
+    flex: 1,
+    color: '#F8FAFC',
+    fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 13,
+  },
+
+  listContent: {
+    paddingHorizontal: 13,
+    paddingBottom: 34,
+  },
+
+  singleItemList: {
+    alignItems: 'center',
+  },
+
+  columnWrapper: {
+    gap: 10,
+  },
+
+  manufacturerCard: {
+    flex: 1,
+    minHeight: 165,
+    margin: 5,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#253047',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  singleManufacturerCard: {
+    width: '100%',
+    maxWidth: 430,
+    flex: 0,
+    alignSelf: 'center',
+  },
+
+  cardPressed: {
+    opacity: 0.74,
+    transform: [{ scale: 0.985 }],
+  },
+
+  manufacturerName: {
+    color: '#F8FAFC',
+    fontSize: 20,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginTop: 13,
+  },
+
+  vehicleCount: {
+    color: '#94A3B8',
+    fontSize: 14,
+    marginTop: 6,
+  },
+
+  emptyState: {
+    paddingTop: 72,
+    paddingHorizontal: 34,
+    alignItems: 'center',
+  },
+
   emptyTitle: {
     color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 15,
   },
+
   emptyText: {
     color: '#94A3B8',
     textAlign: 'center',
-    marginTop: 7,
-    lineHeight: 20,
+    lineHeight: 22,
+    marginTop: 8,
   },
-  centered: {
+
+  loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 24,
   },
+
   loadingText: {
-    color: '#CBD5E1',
+    color: '#94A3B8',
     marginTop: 12,
   },
 });
