@@ -1,4 +1,4 @@
-import bundledFordDatabase from '../data/bundled/ford.json';
+import bundledFordDatabase from '../data/vehicles/ford.json';
 
 export const REMOTE_MANIFEST_URL =
   'https://raw.githubusercontent.com/shrek1802/locksmith-companion-database/main/manifest.json';
