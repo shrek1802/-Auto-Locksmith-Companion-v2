@@ -1,190 +1,114 @@
-import {
-  Linking,
-  Platform,
-} from 'react-native';
-
+import { Linking, Platform } from 'react-native';
 import appConfig from '../app.json';
 
-const GITHUB_OWNER = 'shrek1802';
-const GITHUB_REPOSITORY = '-Auto-Locksmith-Companion-v2';
+const UPDATE_METADATA_URL =
+  'https://raw.githubusercontent.com/shrek1802/locksmith-companion-database/main/APK/latest.json';
 
-const RELEASES_API_URL =
-  `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPOSITORY}/releases/latest`;
+const LATEST_APK_URL =
+  'https://raw.githubusercontent.com/shrek1802/locksmith-companion-database/main/APK/latest.apk';
 
-const RELEASES_PAGE_URL =
-  `https://github.com/${GITHUB_OWNER}/${GITHUB_REPOSITORY}/releases/latest`;
+let pendingApkUrl = LATEST_APK_URL;
+
+function getInstalledVersion() {
+  return String(appConfig?.expo?.version || '0.0.0');
+}
+
+function getInstalledBuild() {
+  if (Platform.OS === 'android') {
+    return Number(appConfig?.expo?.android?.versionCode || 0);
+  }
+
+  return Number(appConfig?.expo?.ios?.buildNumber || 0);
+}
+
+function addCacheBuster(url) {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}t=${Date.now()}`;
+}
+
+async function openUrl(url, errorMessage) {
+  const supported = await Linking.canOpenURL(url);
+
+  if (!supported) {
+    throw new Error(errorMessage);
+  }
+
+  await Linking.openURL(url);
+}
 
 export async function checkForAppUpdate() {
-  const currentVersion =
-    appConfig?.expo?.version || '0.0.0';
+  const currentVersion = getInstalledVersion();
+  const currentVersionCode = getInstalledBuild();
 
-  const currentVersionCode =
-    Platform.OS === 'android'
-      ? Number(appConfig?.expo?.android?.versionCode || 0)
-      : Number(appConfig?.expo?.ios?.buildNumber || 0);
-
-  const response = await fetch(RELEASES_API_URL, {
+  const response = await fetch(addCacheBuster(UPDATE_METADATA_URL), {
     headers: {
-      Accept: 'application/vnd.github+json',
-      'Cache-Control': 'no-cache',
-      'User-Agent': 'Locksmith-Companion-Pro',
+      Accept: 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
     },
   });
 
-  if (response.status === 404) {
-    return {
-      updateAvailable: false,
-      currentVersion,
-      currentVersionCode,
-      latestVersion: null,
-      message: 'No app releases have been published yet.',
-    };
-  }
-
   if (!response.ok) {
     throw new Error(
-      `GitHub update check failed with status ${response.status}.`
+      `App update check failed with status ${response.status}.`,
     );
   }
 
-  const release = await response.json();
+  const metadata = await response.json();
 
-  if (!release || release.draft) {
-    return {
-      updateAvailable: false,
-      currentVersion,
-      currentVersionCode,
-      latestVersion: null,
-      message: 'No public app release is available.',
-    };
+  const latestVersion = String(metadata?.version || '0.0.0');
+  const latestBuild = Number(
+    metadata?.android_version_code ??
+      metadata?.build ??
+      0,
+  );
+
+  if (!Number.isFinite(latestBuild) || latestBuild <= 0) {
+    throw new Error(
+      'The update information does not contain a valid build number.',
+    );
   }
 
-  const latestVersion =
-    cleanVersion(
-      release.tag_name ||
-      release.name ||
-      '0.0.0'
-    );
+  pendingApkUrl =
+    String(metadata?.download_url || '').trim() ||
+    LATEST_APK_URL;
 
   const updateAvailable =
-    compareVersions(
-      latestVersion,
-      currentVersion
-    ) > 0;
-
-  const apkAsset =
-    Array.isArray(release.assets)
-      ? release.assets.find((asset) =>
-          String(asset?.name || '')
-            .toLowerCase()
-            .endsWith('.apk')
-        )
-      : null;
+    Platform.OS === 'android' &&
+    latestBuild > currentVersionCode;
 
   return {
     updateAvailable,
+    available: updateAvailable,
     currentVersion,
     currentVersionCode,
+    currentBuild: currentVersionCode,
     latestVersion,
-    releaseName:
-      release.name ||
-      release.tag_name ||
-      latestVersion,
-    releaseNotes:
-      release.body || '',
-    publishedAt:
-      release.published_at || null,
-    releaseUrl:
-      release.html_url ||
-      RELEASES_PAGE_URL,
-    apkUrl:
-      apkAsset?.browser_download_url || null,
-    apkName:
-      apkAsset?.name || null,
+    latestBuild,
+    apkUrl: pendingApkUrl,
+    apkName: metadata?.versioned_filename || metadata?.filename || 'latest.apk',
+    publishedAt: metadata?.published_at || null,
     message: updateAvailable
-      ? `Version ${latestVersion} is available.`
-      : 'You already have the latest app version.',
+      ? `A new app build is available.\n\nInstalled: ${currentVersion} (${currentVersionCode})\nAvailable: ${latestVersion} (${latestBuild})`
+      : `You already have the latest app version.\n\nInstalled build: ${currentVersionCode}\nLatest build: ${latestBuild}`,
   };
 }
 
 export async function openLatestAppRelease() {
-  const supported =
-    await Linking.canOpenURL(
-      RELEASES_PAGE_URL
-    );
-
-  if (!supported) {
-    throw new Error(
-      'The GitHub release page could not be opened.'
-    );
-  }
-
-  await Linking.openURL(
-    RELEASES_PAGE_URL
+  await openUrl(
+    addCacheBuster(pendingApkUrl || LATEST_APK_URL),
+    'The latest APK download link could not be opened.',
   );
 }
 
-export async function openApkDownload(
-  apkUrl
-) {
-  if (!apkUrl) {
-    await openLatestAppRelease();
-    return;
-  }
+export async function openApkDownload(apkUrl) {
+  pendingApkUrl = apkUrl || pendingApkUrl || LATEST_APK_URL;
 
-  const supported =
-    await Linking.canOpenURL(apkUrl);
-
-  if (!supported) {
-    throw new Error(
-      'The APK download link could not be opened.'
-    );
-  }
-
-  await Linking.openURL(apkUrl);
+  await openUrl(
+    addCacheBuster(pendingApkUrl),
+    'The APK download link could not be opened.',
+  );
 }
 
-function cleanVersion(value) {
-  const match = String(value || '')
-    .trim()
-    .match(/(\d+)\.(\d+)\.(\d+)/);
-
-  if (!match) {
-    return '0.0.0';
-  }
-
-  return `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}`;
-}
-
-function compareVersions(
-  firstVersion,
-  secondVersion
-) {
-  const firstParts =
-    cleanVersion(firstVersion)
-      .split('.')
-      .map(Number);
-
-  const secondParts =
-    cleanVersion(secondVersion)
-      .split('.')
-      .map(Number);
-
-  for (let index = 0; index < 3; index += 1) {
-    const first =
-      firstParts[index] || 0;
-
-    const second =
-      secondParts[index] || 0;
-
-    if (first > second) {
-      return 1;
-    }
-
-    if (first < second) {
-      return -1;
-    }
-  }
-
-  return 0;
+export async function applyAppUpdate() {
+  await openLatestAppRelease();
 }
