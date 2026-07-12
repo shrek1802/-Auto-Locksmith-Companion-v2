@@ -44,6 +44,37 @@ jobs:
       - name: Validate bundled app data
         run: npm run check
 
+      - name: Generate automatic app build number
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUILD_CODE=$((100000 + GITHUB_RUN_NUMBER))
+          APP_VERSION=$(node -p "require('./app.json').expo.version || require('./package.json').version")
+          SAFE_VERSION=$(echo "$APP_VERSION" | tr -cd '0-9A-Za-z._-')
+          APK_NAME="Locksmith-Companion-Pro-v${SAFE_VERSION}-build-${BUILD_CODE}.apk"
+
+          node -e "
+            const fs = require('fs');
+            const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+            const buildCode = Number(process.argv[1]);
+            app.expo = app.expo || {};
+            app.expo.android = app.expo.android || {};
+            app.expo.ios = app.expo.ios || {};
+            app.expo.android.versionCode = buildCode;
+            app.expo.ios.buildNumber = String(buildCode);
+            fs.writeFileSync('app.json', JSON.stringify(app, null, 2) + '\n');
+          " "$BUILD_CODE"
+
+          echo "app_version=$SAFE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_code=$BUILD_CODE" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+
+          echo "Version: $SAFE_VERSION"
+          echo "Android versionCode: $BUILD_CODE"
+          echo "APK name: $APK_NAME"
+
       - name: Generate Android project
         run: CI=1 npx expo prebuild --platform android --clean
 
@@ -54,17 +85,10 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
-      - name: Read app version
-        id: version
+      - name: Prepare APK artifact
         shell: bash
         run: |
-          APP_VERSION=$(node -p "require('./app.json').expo.version || require('./package.json').version")
-          SAFE_VERSION=$(echo "$APP_VERSION" | tr -cd '0-9A-Za-z._-')
-          echo "app_version=$SAFE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "apk_name=Locksmith-Companion-Pro-v${SAFE_VERSION}-build-${GITHUB_RUN_NUMBER}.apk" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare APK artifact
-        run: |
+          set -euo pipefail
           mkdir -p output
           cp android/app/build/outputs/apk/release/app-release.apk \
             "output/${{ steps.version.outputs.apk_name }}"
@@ -72,7 +96,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Locksmith-Companion-Pro-build-${{ github.run_id }}-${{ github.run_attempt }}
+          name: Locksmith-Companion-Pro-build-${{ steps.version.outputs.build_code }}
           path: output/${{ steps.version.outputs.apk_name }}
           if-no-files-found: error
           overwrite: true
@@ -86,37 +110,42 @@ jobs:
           path: database-repo
           ref: main
 
-      - name: Publish APK to database repository
+      - name: Publish APK and update metadata
         shell: bash
+        env:
+          APP_VERSION: ${{ steps.version.outputs.app_version }}
+          BUILD_CODE: ${{ steps.version.outputs.build_code }}
+          APK_NAME: ${{ steps.version.outputs.apk_name }}
         run: |
           set -euo pipefail
 
           APK_DIR="database-repo/APK"
-          VERSIONED_APK="${{ steps.version.outputs.apk_name }}"
-
           mkdir -p "$APK_DIR"
 
-          # Remove the old one-byte placeholder file named APK if it exists.
           if [ -f "$APK_DIR/APK" ]; then
             rm -f "$APK_DIR/APK"
           fi
 
-          cp "output/$VERSIONED_APK" "$APK_DIR/$VERSIONED_APK"
-          cp "output/$VERSIONED_APK" "$APK_DIR/latest.apk"
+          cp "output/$APK_NAME" "$APK_DIR/$APK_NAME"
+          cp "output/$APK_NAME" "$APK_DIR/latest.apk"
 
-          cat > "$APK_DIR/latest.json" <<EOF
-          {
-            "version": "${{ steps.version.outputs.app_version }}",
-            "build": ${GITHUB_RUN_NUMBER},
-            "filename": "latest.apk",
-            "versioned_filename": "$VERSIONED_APK",
-            "download_url": "https://raw.githubusercontent.com/shrek1802/locksmith-companion-database/main/APK/latest.apk",
-            "published_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
-            "source_commit": "${GITHUB_SHA}"
-          }
-          EOF
+          node -e "
+            const fs = require('fs');
+            const outputPath = process.argv[1];
+            const payload = {
+              schema_version: '1.0',
+              version: process.env.APP_VERSION,
+              build: Number(process.env.BUILD_CODE),
+              android_version_code: Number(process.env.BUILD_CODE),
+              filename: 'latest.apk',
+              versioned_filename: process.env.APK_NAME,
+              download_url: 'https://raw.githubusercontent.com/shrek1802/locksmith-companion-database/main/APK/latest.apk',
+              published_at: new Date().toISOString(),
+              source_commit: process.env.GITHUB_SHA
+            };
+            fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2) + '\n');
+          " "$APK_DIR/latest.json"
 
-          # Keep only the newest five versioned APKs, plus latest.apk.
           find "$APK_DIR" -maxdepth 1 -type f \
             -name 'Locksmith-Companion-Pro-v*-build-*.apk' \
             -printf '%T@ %p\n' \
@@ -140,5 +169,5 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Publish Android APK v${{ steps.version.outputs.app_version }} build ${{ github.run_number }}"
+          git commit -m "Publish Android APK v${{ steps.version.outputs.app_version }} build ${{ steps.version.outputs.build_code }}"
           git push origin main
