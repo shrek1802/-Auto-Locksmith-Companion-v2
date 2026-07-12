@@ -1,6 +1,5 @@
 import * as FileSystem from 'expo-file-system';
 
-import bundledFord from '../data/vehicles/ford.json';
 import {
   DATABASE_FOLDER_NAME,
   LOCAL_MANIFEST_NAME,
@@ -8,31 +7,24 @@ import {
   REQUEST_TIMEOUT_MS,
 } from '../config/databaseConfig';
 
-const DATABASE_ROOT = `${FileSystem.documentDirectory}${DATABASE_FOLDER_NAME}/`;
-const LOCAL_ROOT_MANIFEST_PATH = `${DATABASE_ROOT}${LOCAL_MANIFEST_NAME}`;
+const DATABASE_ROOT =
+  `${FileSystem.documentDirectory}${DATABASE_FOLDER_NAME}/`;
 
-const BUNDLED_ROOT_MANIFEST = {
+const LOCAL_ROOT_MANIFEST_PATH =
+  `${DATABASE_ROOT}${LOCAL_MANIFEST_NAME}`;
+
+const EMPTY_ROOT_MANIFEST = {
   schema_version: '2.1',
-  updated_at: '2026-07-12',
-  manufacturers: {
-    ford: {
-      name: 'Ford',
-      version: 1,
-      local_file: 'ford/bundled.json',
-      bundled: true,
-    },
-  },
-};
-
-const BUNDLED_DATABASES = {
-  ford: normaliseBundledManufacturer(bundledFord, 'ford', 'Ford'),
+  updated_at: null,
+  database_source: 'remote_only',
+  manufacturers: {},
 };
 
 export async function initialiseDatabase() {
   await ensureDirectory(DATABASE_ROOT);
 
   if (!(await fileExists(LOCAL_ROOT_MANIFEST_PATH))) {
-    await installBundledDatabase();
+    await installEmptyDatabase();
   }
 
   return loadDatabase();
@@ -44,27 +36,40 @@ export async function loadDatabase() {
   let rootManifest;
 
   try {
-    rootManifest = await readJson(LOCAL_ROOT_MANIFEST_PATH);
+    rootManifest = await readJson(
+      LOCAL_ROOT_MANIFEST_PATH,
+    );
     validateRootManifest(rootManifest);
   } catch (error) {
-    console.warn('Local manifest invalid. Restoring bundled data.', error);
+    console.warn(
+      'Local database manifest is invalid. Resetting local database.',
+      error,
+    );
+
     await resetToBundledDatabase();
-    rootManifest = await readJson(LOCAL_ROOT_MANIFEST_PATH);
+    rootManifest = await readJson(
+      LOCAL_ROOT_MANIFEST_PATH,
+    );
   }
 
   const byManufacturer = {};
 
-  for (const [manufacturerId, manufacturerEntry] of Object.entries(
+  for (const [
+    manufacturerId,
+    manufacturerEntry,
+  ] of Object.entries(
     rootManifest.manufacturers || {},
   )) {
     try {
-      const combined = await loadLocalManufacturer(
-        manufacturerId,
-        manufacturerEntry,
-      );
+      const combined =
+        await loadLocalManufacturer(
+          manufacturerId,
+          manufacturerEntry,
+        );
 
       if (combined) {
-        byManufacturer[manufacturerId] = combined;
+        byManufacturer[manufacturerId] =
+          combined;
       }
     } catch (error) {
       console.warn(
@@ -83,24 +88,54 @@ export async function loadDatabase() {
 export async function checkForDatabaseUpdates() {
   validateRemoteUrl();
 
-  const remoteRootManifest = await fetchJsonNoCache(REMOTE_MANIFEST_URL);
+  const remoteRootManifest =
+    await fetchJsonNoCache(
+      REMOTE_MANIFEST_URL,
+    );
+
   validateRootManifest(remoteRootManifest);
 
-  const localRootManifest = await loadLocalRootManifest();
+  const localRootManifest =
+    await loadLocalRootManifest();
+
   const changed = [];
 
-  for (const [manufacturerId, remoteEntry] of Object.entries(
+  for (const [
+    manufacturerId,
+    remoteEntry,
+  ] of Object.entries(
     remoteRootManifest.manufacturers || {},
   )) {
-    const localEntry = localRootManifest.manufacturers?.[manufacturerId];
+    const localEntry =
+      localRootManifest.manufacturers?.[
+        manufacturerId
+      ];
+
+    const manufacturerDirectory =
+      `${DATABASE_ROOT}${manufacturerId}/`;
+
+    const localManufacturerManifestExists =
+      await fileExists(
+        `${manufacturerDirectory}manifest.json`,
+      );
 
     const manufacturerChanged =
       !localEntry ||
-      String(localEntry.version ?? '') !== String(remoteEntry.version ?? '') ||
-      (remoteEntry.sha256 && remoteEntry.sha256 !== localEntry.sha256);
+      localEntry.bundled === true ||
+      !localManufacturerManifestExists ||
+      String(localEntry.version ?? '') !==
+        String(remoteEntry.version ?? '') ||
+      (
+        remoteEntry.sha256 &&
+        remoteEntry.sha256 !==
+          localEntry.sha256
+      );
 
     if (manufacturerChanged) {
-      changed.push([manufacturerId, remoteEntry]);
+      changed.push([
+        manufacturerId,
+        remoteEntry,
+      ]);
     }
   }
 
@@ -118,31 +153,46 @@ export async function downloadDatabaseUpdates(
   await ensureDirectory(DATABASE_ROOT);
   validateRootManifest(remoteRootManifest);
 
-  const localRootManifest = await loadLocalRootManifest();
+  if (!Array.isArray(changedEntries)) {
+    throw new Error(
+      'The database update list is invalid.',
+    );
+  }
+
+  const localRootManifest =
+    await loadLocalRootManifest();
 
   const nextRootManifest = {
     ...remoteRootManifest,
+    database_source: 'remote_only',
     manufacturers: {
-      ...(localRootManifest.manufacturers || {}),
+      ...(localRootManifest.manufacturers ||
+        {}),
     },
   };
 
   const updatedManufacturerNames = [];
 
-  for (const [manufacturerId, remoteManufacturerEntry] of changedEntries) {
+  for (const [
+    manufacturerId,
+    remoteManufacturerEntry,
+  ] of changedEntries) {
     const result = await updateManufacturer(
       manufacturerId,
       remoteManufacturerEntry,
-      localRootManifest.manufacturers?.[manufacturerId],
     );
 
-    nextRootManifest.manufacturers[manufacturerId] = {
+    nextRootManifest.manufacturers[
+      manufacturerId
+    ] = {
       ...remoteManufacturerEntry,
+      bundled: false,
       name:
         remoteManufacturerEntry.name ||
         result.manufacturerName ||
         formatName(manufacturerId),
-      local_manifest: `${manufacturerId}/manifest.json`,
+      local_manifest:
+        `${manufacturerId}/manifest.json`,
     };
 
     updatedManufacturerNames.push(
@@ -152,35 +202,53 @@ export async function downloadDatabaseUpdates(
     );
   }
 
+  nextRootManifest.updated_at =
+    remoteRootManifest.updated_at ||
+    new Date().toISOString();
+
   await writeJsonAtomically(
     LOCAL_ROOT_MANIFEST_PATH,
     nextRootManifest,
   );
 
-  return [...new Set(updatedManufacturerNames)].sort((a, b) =>
-    a.localeCompare(b),
-  );
+  return [
+    ...new Set(updatedManufacturerNames),
+  ].sort((a, b) => a.localeCompare(b));
 }
 
+/*
+ * Kept under the existing exported name so the current DatabaseContext and
+ * Settings screen do not need changing. It now removes all local data and
+ * restores an empty remote-only database rather than a bundled Ford record.
+ */
 export async function resetToBundledDatabase() {
   if (await fileExists(DATABASE_ROOT)) {
-    await FileSystem.deleteAsync(DATABASE_ROOT, { idempotent: true });
+    await FileSystem.deleteAsync(
+      DATABASE_ROOT,
+      {
+        idempotent: true,
+      },
+    );
   }
 
-  await installBundledDatabase();
+  await installEmptyDatabase();
   return loadDatabase();
 }
 
 async function updateManufacturer(
   manufacturerId,
   remoteManufacturerEntry,
-  localManufacturerEntry,
 ) {
-  const manufacturerDirectory = `${DATABASE_ROOT}${manufacturerId}/`;
-  await ensureDirectory(manufacturerDirectory);
+  const manufacturerDirectory =
+    `${DATABASE_ROOT}${manufacturerId}/`;
+
+  await ensureDirectory(
+    manufacturerDirectory,
+  );
 
   const remoteManifestReference =
-    remoteManufacturerEntry.manifest || remoteManufacturerEntry.file;
+    remoteManufacturerEntry.manifest ||
+    remoteManufacturerEntry.file;
 
   if (!remoteManifestReference) {
     throw new Error(
@@ -188,14 +256,16 @@ async function updateManufacturer(
     );
   }
 
-  const remoteManufacturerManifestUrl = resolveUrl(
-    REMOTE_MANIFEST_URL,
-    remoteManifestReference,
-  );
+  const remoteManufacturerManifestUrl =
+    resolveUrl(
+      REMOTE_MANIFEST_URL,
+      remoteManifestReference,
+    );
 
-  const remoteManufacturerManifest = await fetchJsonNoCache(
-    remoteManufacturerManifestUrl,
-  );
+  const remoteManufacturerManifest =
+    await fetchJsonNoCache(
+      remoteManufacturerManifestUrl,
+    );
 
   validateManufacturerManifest(
     remoteManufacturerManifest,
@@ -217,31 +287,56 @@ async function updateManufacturer(
     models: {},
   };
 
-  if (await fileExists(localManufacturerManifestPath)) {
+  if (
+    await fileExists(
+      localManufacturerManifestPath,
+    )
+  ) {
     try {
-      localManufacturerManifest = await readJson(
-        localManufacturerManifestPath,
-      );
+      localManufacturerManifest =
+        await readJson(
+          localManufacturerManifestPath,
+        );
     } catch {
-      // Use the empty local manifest fallback.
+      // Download every model if the saved manufacturer manifest is invalid.
     }
   }
 
   const preparedFiles = [];
 
-  for (const [modelId, remoteModelEntry] of Object.entries(
+  for (const [
+    modelId,
+    remoteModelEntry,
+  ] of Object.entries(
     remoteManufacturerManifest.models || {},
   )) {
     const localModelEntry =
-      localManufacturerManifest.models?.[modelId];
+      localManufacturerManifest.models?.[
+        modelId
+      ];
+
+    const nestedManifestPath =
+      `${manufacturerDirectory}${modelId}/manifest.json`;
+
+    const flatModelPath =
+      `${manufacturerDirectory}${modelId}.json`;
+
+    const localModelFilesExist =
+      remoteModelEntry.manifest
+        ? await fileExists(
+            nestedManifestPath,
+          )
+        : await fileExists(flatModelPath);
 
     const modelChanged =
       !localModelEntry ||
+      !localModelFilesExist ||
       String(localModelEntry.version ?? '') !==
         String(remoteModelEntry.version ?? '') ||
       (
         remoteModelEntry.sha256 &&
-        remoteModelEntry.sha256 !== localModelEntry.sha256
+        remoteModelEntry.sha256 !==
+          localModelEntry.sha256
       );
 
     if (!modelChanged) {
@@ -274,7 +369,9 @@ async function updateManufacturer(
       await ensureDirectory(
         prepared.finalPath.slice(
           0,
-          prepared.finalPath.lastIndexOf('/') + 1,
+          prepared.finalPath.lastIndexOf(
+            '/',
+          ) + 1,
         ),
       );
 
@@ -290,16 +387,19 @@ async function updateManufacturer(
     );
   } catch (error) {
     for (const prepared of preparedFiles) {
-      await deleteIfExists(prepared.temporaryPath);
+      await deleteIfExists(
+        prepared.temporaryPath,
+      );
     }
+
     throw error;
   }
 
   return {
     manufacturerName:
-      remoteManufacturerManifest.manufacturer?.name ||
+      remoteManufacturerManifest
+        .manufacturer?.name ||
       remoteManufacturerEntry.name ||
-      localManufacturerEntry?.name ||
       formatName(manufacturerId),
   };
 }
@@ -323,17 +423,29 @@ async function prepareFlatModelDownload({
     remoteModelEntry.file,
   );
 
-  const modelData = await fetchJsonNoCache(remoteModelUrl);
-  validateLegacyModelFile(modelData, manufacturerId, modelId);
+  const modelData =
+    await fetchJsonNoCache(
+      remoteModelUrl,
+    );
+
+  validateLegacyModelFile(
+    modelData,
+    manufacturerId,
+    modelId,
+  );
 
   const temporaryPath =
     `${manufacturerDirectory}.${modelId}.download.json`;
 
-  await writeTemporaryJson(temporaryPath, modelData);
+  await writeTemporaryJson(
+    temporaryPath,
+    modelData,
+  );
 
   preparedFiles.push({
     temporaryPath,
-    finalPath: `${manufacturerDirectory}${modelId}.json`,
+    finalPath:
+      `${manufacturerDirectory}${modelId}.json`,
   });
 }
 
@@ -345,14 +457,16 @@ async function prepareNestedModelDownload({
   manufacturerDirectory,
   preparedFiles,
 }) {
-  const remoteModelManifestUrl = resolveUrl(
-    remoteManufacturerManifestUrl,
-    remoteModelEntry.manifest,
-  );
+  const remoteModelManifestUrl =
+    resolveUrl(
+      remoteManufacturerManifestUrl,
+      remoteModelEntry.manifest,
+    );
 
-  const modelManifest = await fetchJsonNoCache(
-    remoteModelManifestUrl,
-  );
+  const modelManifest =
+    await fetchJsonNoCache(
+      remoteModelManifestUrl,
+    );
 
   validateNestedModelManifest(
     modelManifest,
@@ -360,7 +474,8 @@ async function prepareNestedModelDownload({
     modelId,
   );
 
-  const modelDirectory = `${manufacturerDirectory}${modelId}/`;
+  const modelDirectory =
+    `${manufacturerDirectory}${modelId}/`;
 
   const temporaryManifestPath =
     `${manufacturerDirectory}.${modelId}.manifest.download.json`;
@@ -371,15 +486,21 @@ async function prepareNestedModelDownload({
   );
 
   preparedFiles.push({
-    temporaryPath: temporaryManifestPath,
-    finalPath: `${modelDirectory}manifest.json`,
+    temporaryPath:
+      temporaryManifestPath,
+    finalPath:
+      `${modelDirectory}manifest.json`,
   });
 
-  for (const [componentId, componentReference] of Object.entries(
+  for (const [
+    componentId,
+    componentReference,
+  ] of Object.entries(
     modelManifest.files || {},
   )) {
     const relativeFile =
-      typeof componentReference === 'string'
+      typeof componentReference ===
+      'string'
         ? componentReference
         : componentReference?.file;
 
@@ -389,11 +510,18 @@ async function prepareNestedModelDownload({
       );
     }
 
-    const componentData = await fetchJsonNoCache(
-      resolveUrl(remoteModelManifestUrl, relativeFile),
-    );
+    const componentData =
+      await fetchJsonNoCache(
+        resolveUrl(
+          remoteModelManifestUrl,
+          relativeFile,
+        ),
+      );
 
-    if (!componentData || typeof componentData !== 'object') {
+    if (
+      !componentData ||
+      typeof componentData !== 'object'
+    ) {
       throw new Error(
         `${manufacturerId}/${modelId}/${componentId} is invalid.`,
       );
@@ -410,7 +538,9 @@ async function prepareNestedModelDownload({
     preparedFiles.push({
       temporaryPath,
       finalPath:
-        `${modelDirectory}${getFileName(relativeFile)}`,
+        `${modelDirectory}${getFileName(
+          relativeFile,
+        )}`,
     });
   }
 }
@@ -419,10 +549,6 @@ async function loadLocalManufacturer(
   manufacturerId,
   rootEntry,
 ) {
-  if (rootEntry.bundled && BUNDLED_DATABASES[manufacturerId]) {
-    return BUNDLED_DATABASES[manufacturerId];
-  }
-
   const manufacturerDirectory =
     `${DATABASE_ROOT}${manufacturerId}/`;
 
@@ -430,10 +556,11 @@ async function loadLocalManufacturer(
     `${manufacturerDirectory}manifest.json`;
 
   if (!(await fileExists(manifestPath))) {
-    return BUNDLED_DATABASES[manufacturerId] || null;
+    return null;
   }
 
-  const manufacturerManifest = await readJson(manifestPath);
+  const manufacturerManifest =
+    await readJson(manifestPath);
 
   validateManufacturerManifest(
     manufacturerManifest,
@@ -442,36 +569,48 @@ async function loadLocalManufacturer(
 
   const records = [];
 
-  for (const [modelId, modelEntry] of Object.entries(
+  for (const [
+    modelId,
+    modelEntry,
+  ] of Object.entries(
     manufacturerManifest.models || {},
   )) {
-    if (modelEntry.manifest) {
-      records.push(
-        ...await loadNestedModelRecords(
-          manufacturerId,
-          modelId,
-          manufacturerDirectory,
-        ),
-      );
-    } else {
-      records.push(
-        ...await loadLegacyModelRecords(
-          manufacturerId,
-          modelId,
-          modelEntry,
-          manufacturerDirectory,
-        ),
+    try {
+      if (modelEntry.manifest) {
+        records.push(
+          ...await loadNestedModelRecords(
+            manufacturerId,
+            modelId,
+            manufacturerDirectory,
+          ),
+        );
+      } else {
+        records.push(
+          ...await loadLegacyModelRecords(
+            manufacturerId,
+            modelId,
+            modelEntry,
+            manufacturerDirectory,
+          ),
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `Could not load ${manufacturerId}/${modelId}:`,
+        error?.message || error,
       );
     }
   }
 
   return {
     schema_version:
-      manufacturerManifest.schema_version || '2.1',
+      manufacturerManifest
+        .schema_version || '2.1',
     manufacturer: {
       id: manufacturerId,
       name:
-        manufacturerManifest.manufacturer?.name ||
+        manufacturerManifest
+          .manufacturer?.name ||
         rootEntry.name ||
         formatName(manufacturerId),
     },
@@ -524,23 +663,29 @@ async function loadNestedModelRecords(
 
   const components = {};
 
-  for (const [componentId, componentReference] of Object.entries(
+  for (const [
+    componentId,
+    componentReference,
+  ] of Object.entries(
     modelManifest.files || {},
   )) {
     const relativeFile =
-      typeof componentReference === 'string'
+      typeof componentReference ===
+      'string'
         ? componentReference
         : componentReference?.file;
 
-    components[componentId] = await readJson(
-      `${modelDirectory}${getFileName(relativeFile)}`,
-    );
+    components[componentId] =
+      await readJson(
+        `${modelDirectory}${getFileName(
+          relativeFile,
+        )}`,
+      );
   }
 
   return composeNestedModelRecords(
     manufacturerId,
     modelId,
-    modelManifest,
     components,
   );
 }
@@ -548,42 +693,58 @@ async function loadNestedModelRecords(
 function composeNestedModelRecords(
   manufacturerId,
   modelId,
-  modelManifest,
   components,
 ) {
   const modelsComponent =
-    components.models || components.vehicles || {};
+    components.models ||
+    components.vehicles ||
+    {};
 
-  if (Array.isArray(modelsComponent.records)) {
-    return modelsComponent.records.map((record) =>
-      attachNestedSections(record, components),
+  if (
+    Array.isArray(
+      modelsComponent.records,
+    )
+  ) {
+    return modelsComponent.records.map(
+      (record) =>
+        attachNestedSections(
+          record,
+          components,
+        ),
     );
   }
 
-  const modelItems = modelsComponent.items || {};
+  const modelItems =
+    modelsComponent.items || {};
 
   return Object.entries(modelItems).map(
-    ([variantId, vehicleDefinition]) => {
+    ([variantId, definition]) => {
       const vehicle =
-        vehicleDefinition.vehicle || vehicleDefinition;
+        definition.vehicle ||
+        definition;
+
+      const baseRecord = {
+        ...definition,
+        record_id:
+          definition.record_id ||
+          `${manufacturerId}_${modelId}_${variantId}`,
+        vehicle: {
+          ...vehicle,
+          manufacturer_id:
+            vehicle.manufacturer_id ||
+            manufacturerId,
+          model_id:
+            vehicle.model_id ||
+            modelId,
+          market:
+            vehicle.market || 'UK',
+          drive_side:
+            vehicle.drive_side || 'RHD',
+        },
+      };
 
       return attachNestedSections(
-        {
-          record_id:
-            vehicleDefinition.record_id ||
-            `${manufacturerId}_${modelId}_${variantId}`,
-          vehicle: {
-            ...vehicle,
-            manufacturer_id:
-              vehicle.manufacturer_id || manufacturerId,
-            model_id:
-              vehicle.model_id || modelId,
-            market:
-              vehicle.market || 'UK',
-            drive_side:
-              vehicle.drive_side || 'RHD',
-          },
-        },
+        baseRecord,
         components,
         variantId,
       );
@@ -596,11 +757,14 @@ function attachNestedSections(
   components,
   variantId = null,
 ) {
-  const result = { ...record };
+  const result = {
+    ...record,
+  };
 
-  for (const [componentId, componentData] of Object.entries(
-    components,
-  )) {
+  for (const [
+    componentId,
+    componentData,
+  ] of Object.entries(components)) {
     if (
       componentId === 'models' ||
       componentId === 'vehicles'
@@ -608,11 +772,12 @@ function attachNestedSections(
       continue;
     }
 
-    const section = selectComponentSection(
-      componentData,
-      variantId,
-      record.record_id,
-    );
+    const section =
+      selectComponentSection(
+        componentData,
+        variantId,
+        record.record_id,
+      );
 
     if (section !== undefined) {
       result[componentId] = section;
@@ -627,7 +792,10 @@ function selectComponentSection(
   variantId,
   recordId,
 ) {
-  if (!componentData || typeof componentData !== 'object') {
+  if (
+    !componentData ||
+    typeof componentData !== 'object'
+  ) {
     return undefined;
   }
 
@@ -639,7 +807,9 @@ function selectComponentSection(
       variantId,
     )
   ) {
-    return componentData.items[variantId];
+    return componentData.items[
+      variantId
+    ];
   }
 
   if (
@@ -650,36 +820,29 @@ function selectComponentSection(
       recordId,
     )
   ) {
-    return componentData.items[recordId];
+    return componentData.items[
+      recordId
+    ];
   }
 
-  if (componentData.shared !== undefined) {
+  if (
+    componentData.shared !== undefined
+  ) {
     return componentData.shared;
   }
 
-  return componentData.items || componentData;
+  return (
+    componentData.items ||
+    componentData
+  );
 }
 
-async function installBundledDatabase() {
+async function installEmptyDatabase() {
   await ensureDirectory(DATABASE_ROOT);
-
-  for (const [manufacturerId, data] of Object.entries(
-    BUNDLED_DATABASES,
-  )) {
-    const directory =
-      `${DATABASE_ROOT}${manufacturerId}/`;
-
-    await ensureDirectory(directory);
-
-    await writeJsonAtomically(
-      `${directory}bundled.json`,
-      data,
-    );
-  }
 
   await writeJsonAtomically(
     LOCAL_ROOT_MANIFEST_PATH,
-    BUNDLED_ROOT_MANIFEST,
+    EMPTY_ROOT_MANIFEST,
   );
 }
 
@@ -688,49 +851,29 @@ async function loadLocalRootManifest() {
     const manifest = await readJson(
       LOCAL_ROOT_MANIFEST_PATH,
     );
+
     validateRootManifest(manifest);
     return manifest;
   } catch {
     return {
-      schema_version: '2.1',
-      updated_at: null,
+      ...EMPTY_ROOT_MANIFEST,
       manufacturers: {},
     };
   }
 }
 
-function normaliseBundledManufacturer(
-  value,
-  manufacturerId,
-  manufacturerName,
+function validateRootManifest(
+  manifest,
 ) {
-  if (
-    value?.manufacturer &&
-    Array.isArray(value?.records)
-  ) {
-    return value;
-  }
-
-  return {
-    schema_version: '2.1',
-    manufacturer: {
-      id: manufacturerId,
-      name: manufacturerName,
-    },
-    records:
-      value?.records ||
-      value?.vehicles ||
-      (Array.isArray(value) ? value : []),
-  };
-}
-
-function validateRootManifest(manifest) {
   if (
     !manifest ||
     typeof manifest !== 'object' ||
     !manifest.manufacturers ||
-    typeof manifest.manufacturers !== 'object' ||
-    Array.isArray(manifest.manufacturers)
+    typeof manifest.manufacturers !==
+      'object' ||
+    Array.isArray(
+      manifest.manufacturers,
+    )
   ) {
     throw new Error(
       'The root manifest must contain a manufacturers object.',
@@ -740,38 +883,39 @@ function validateRootManifest(manifest) {
 
 function validateManufacturerManifest(
   manifest,
-  expectedManufacturerId,
+  manufacturerId,
 ) {
   if (
     !manifest ||
     typeof manifest !== 'object' ||
     !manifest.manufacturer ||
     !manifest.models ||
-    typeof manifest.models !== 'object' ||
+    typeof manifest.models !==
+      'object' ||
     Array.isArray(manifest.models)
   ) {
     throw new Error(
-      `The ${expectedManufacturerId} manifest is invalid.`,
+      `The ${manufacturerId} manifest is invalid.`,
     );
   }
 
   if (
     manifest.manufacturer.id &&
     manifest.manufacturer.id !==
-      expectedManufacturerId
+      manufacturerId
   ) {
     throw new Error(
-      `Manufacturer ID mismatch in ${expectedManufacturerId}.`,
+      `Manufacturer ID mismatch in ${manufacturerId}.`,
     );
   }
 }
 
 function validateLegacyModelFile(
-  modelData,
+  data,
   manufacturerId,
   modelId,
 ) {
-  if (!Array.isArray(modelData?.records)) {
+  if (!Array.isArray(data?.records)) {
     throw new Error(
       `Vehicle records are missing from ${manufacturerId}/${modelId}.json.`,
     );
@@ -796,8 +940,11 @@ function validateNestedModelManifest(
   }
 }
 
-async function fetchJsonNoCache(url) {
-  const controller = new AbortController();
+async function fetchJsonNoCache(
+  url,
+) {
+  const controller =
+    new AbortController();
 
   const timer = setTimeout(
     () => controller.abort(),
@@ -814,7 +961,8 @@ async function fetchJsonNoCache(url) {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
-          'Cache-Control': 'no-cache',
+          'Cache-Control':
+            'no-cache, no-store',
         },
       },
     );
@@ -826,56 +974,92 @@ async function fetchJsonNoCache(url) {
     }
 
     return response.json();
+  } catch (error) {
+    if (
+      error?.name === 'AbortError'
+    ) {
+      throw new Error(
+        'The database download timed out.',
+      );
+    }
+
+    throw error;
   } finally {
     clearTimeout(timer);
   }
 }
 
-function resolveUrl(parentUrl, childPath) {
-  if (/^https?:\/\//i.test(childPath || '')) {
+function resolveUrl(
+  parentUrl,
+  childPath,
+) {
+  if (
+    /^https?:\/\//i.test(
+      childPath || '',
+    )
+  ) {
     return childPath;
   }
 
   return new URL(
-    String(childPath || '').replace(/^\/+/, ''),
+    String(childPath || '').replace(
+      /^\/+/,
+      '',
+    ),
     parentUrl,
   ).toString();
 }
 
 async function ensureDirectory(path) {
-  const info = await FileSystem.getInfoAsync(path);
+  const info =
+    await FileSystem.getInfoAsync(path);
 
   if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(path, {
-      intermediates: true,
-    });
+    await FileSystem.makeDirectoryAsync(
+      path,
+      {
+        intermediates: true,
+      },
+    );
   }
 }
 
 async function fileExists(path) {
-  const info = await FileSystem.getInfoAsync(path);
+  const info =
+    await FileSystem.getInfoAsync(path);
+
   return info.exists;
 }
 
 async function readJson(path) {
-  const text = await FileSystem.readAsStringAsync(
-    path,
-    {
-      encoding: FileSystem.EncodingType.UTF8,
-    },
-  );
+  const text =
+    await FileSystem.readAsStringAsync(
+      path,
+      {
+        encoding:
+          FileSystem.EncodingType.UTF8,
+      },
+    );
 
   return JSON.parse(text);
 }
 
-async function writeTemporaryJson(path, value) {
+async function writeTemporaryJson(
+  path,
+  value,
+) {
   await deleteIfExists(path);
 
   await FileSystem.writeAsStringAsync(
     path,
-    JSON.stringify(value, null, 2),
+    JSON.stringify(
+      value,
+      null,
+      2,
+    ),
     {
-      encoding: FileSystem.EncodingType.UTF8,
+      encoding:
+        FileSystem.EncodingType.UTF8,
     },
   );
 }
@@ -922,7 +1106,9 @@ async function replaceFileSafely(
 
     await deleteIfExists(backupPath);
   } catch (error) {
-    if (await fileExists(backupPath)) {
+    if (
+      await fileExists(backupPath)
+    ) {
       await FileSystem.moveAsync({
         from: backupPath,
         to: finalPath,
@@ -935,9 +1121,12 @@ async function replaceFileSafely(
 
 async function deleteIfExists(path) {
   if (await fileExists(path)) {
-    await FileSystem.deleteAsync(path, {
-      idempotent: true,
-    });
+    await FileSystem.deleteAsync(
+      path,
+      {
+        idempotent: true,
+      },
+    );
   }
 }
 
@@ -952,14 +1141,17 @@ function formatName(value) {
     .replace(/[-_]+/g, ' ')
     .replace(
       /\b\w/g,
-      (character) => character.toUpperCase(),
+      (character) =>
+        character.toUpperCase(),
     );
 }
 
 function validateRemoteUrl() {
   if (
     !REMOTE_MANIFEST_URL ||
-    REMOTE_MANIFEST_URL.includes('CHANGE-ME')
+    REMOTE_MANIFEST_URL.includes(
+      'CHANGE-ME',
+    )
   ) {
     throw new Error(
       'Set REMOTE_MANIFEST_URL in config/databaseConfig.js first.',
