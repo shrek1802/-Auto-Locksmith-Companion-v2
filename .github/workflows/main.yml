@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build and Publish Android APK
 
 on:
   workflow_dispatch:
@@ -6,25 +6,31 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-and-publish-android-apk
+  cancel-in-progress: false
+
 jobs:
   build:
-    name: Build Android APK
+    name: Build APK and publish to database repo
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Check out app repository
         uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
+          cache: npm
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
+          cache: gradle
 
       - name: Install dependencies
         run: npm install
@@ -37,7 +43,7 @@ jobs:
       - name: Check Expo project
         run: npx expo-doctor
 
-      - name: Validate database files
+      - name: Validate bundled app data
         run: npm run check
 
       - name: Generate Android project
@@ -50,17 +56,91 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
-      - name: Prepare APK
+      - name: Read app version
+        id: version
+        shell: bash
+        run: |
+          APP_VERSION=$(node -p "require('./app.json').expo.version || require('./package.json').version")
+          SAFE_VERSION=$(echo "$APP_VERSION" | tr -cd '0-9A-Za-z._-')
+          echo "app_version=$SAFE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "apk_name=Locksmith-Companion-Pro-v${SAFE_VERSION}-build-${GITHUB_RUN_NUMBER}.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare APK artifact
         run: |
           mkdir -p output
           cp android/app/build/outputs/apk/release/app-release.apk \
-            output/Locksmith-Companion-Pro-v2.0.0-build-${{ github.run_number }}.apk
+            "output/${{ steps.version.outputs.apk_name }}"
 
-      - name: Upload APK
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: Locksmith-Companion-Pro-build-${{ github.run_id }}-${{ github.run_attempt }}
-          path: output/Locksmith-Companion-Pro-v2.0.0-build-${{ github.run_number }}.apk
+          path: output/${{ steps.version.outputs.apk_name }}
           if-no-files-found: error
           overwrite: true
           retention-days: 30
+
+      - name: Check out database repository
+        uses: actions/checkout@v4
+        with:
+          repository: shrek1802/locksmith-companion-database
+          token: ${{ secrets.DATABASE_REPO_TOKEN }}
+          path: database-repo
+          ref: main
+
+      - name: Publish APK to database repository
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK_DIR="database-repo/APK"
+          VERSIONED_APK="${{ steps.version.outputs.apk_name }}"
+
+          mkdir -p "$APK_DIR"
+
+          # Remove the old one-byte placeholder file named APK if it exists.
+          if [ -f "$APK_DIR/APK" ]; then
+            rm -f "$APK_DIR/APK"
+          fi
+
+          cp "output/$VERSIONED_APK" "$APK_DIR/$VERSIONED_APK"
+          cp "output/$VERSIONED_APK" "$APK_DIR/latest.apk"
+
+          cat > "$APK_DIR/latest.json" <<EOF
+          {
+            "version": "${{ steps.version.outputs.app_version }}",
+            "build": ${GITHUB_RUN_NUMBER},
+            "filename": "latest.apk",
+            "versioned_filename": "$VERSIONED_APK",
+            "download_url": "https://raw.githubusercontent.com/shrek1802/locksmith-companion-database/main/APK/latest.apk",
+            "published_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "source_commit": "${GITHUB_SHA}"
+          }
+          EOF
+
+          # Keep only the newest five versioned APKs, plus latest.apk.
+          find "$APK_DIR" -maxdepth 1 -type f \
+            -name 'Locksmith-Companion-Pro-v*-build-*.apk' \
+            -printf '%T@ %p\n' \
+            | sort -nr \
+            | awk 'NR>5 {print $2}' \
+            | xargs -r rm -f
+
+      - name: Commit APK to database repository
+        working-directory: database-repo
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add APK/
+
+          if git diff --cached --quiet; then
+            echo "No APK changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Publish Android APK v${{ steps.version.outputs.app_version }} build ${{ github.run_number }}"
+          git push origin main
