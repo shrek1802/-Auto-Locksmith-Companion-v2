@@ -14,55 +14,23 @@ import { Ionicons } from '@expo/vector-icons';
 
 import AutomotiveIcon from '../components/AutomotiveIcon';
 import OperationSection from '../components/OperationSection';
+import QuickJobCard from '../components/QuickJobCard';
 
 const TILE_CONFIG = [
-  {
-    id: 'key_information',
-    title: 'Key Info',
-    icon: 'key',
-  },
-  {
-    id: 'programming',
-    title: 'Programming',
-    icon: 'programming',
-  },
-  {
-    id: 'obd',
-    title: 'OBD',
-    icon: 'obd',
-  },
-  {
-    id: 'eeprom',
-    title: 'EEPROM',
-    icon: 'chip',
-  },
-  {
-    id: 'modules',
-    title: 'Modules',
-    icon: 'modules',
-  },
-  {
-    id: 'tools',
-    title: 'Tools',
-    icon: 'tools',
-  },
-  {
-    id: 'photos',
-    title: 'Photos',
-    icon: 'photos',
-  },
-  {
-    id: 'notes',
-    title: 'Notes',
-    icon: 'notes',
-  },
+  { id: 'key_information', title: 'Key Info', icon: 'key' },
+  { id: 'programming', title: 'Programming', icon: 'programming' },
+  { id: 'obd', title: 'OBD', icon: 'obd' },
+  { id: 'eeprom', title: 'EEPROM', icon: 'chip' },
+  { id: 'modules', title: 'Modules', icon: 'modules' },
+  { id: 'tools', title: 'Tools', icon: 'tools' },
+  { id: 'photos', title: 'Photos', icon: 'photos' },
+  { id: 'notes', title: 'Notes', icon: 'notes' },
 ];
 
 export default function VehicleScreen({
   route,
 }) {
   const { record } = route.params || {};
-
   const [activeSection, setActiveSection] =
     useState('key_information');
 
@@ -73,63 +41,25 @@ export default function VehicleScreen({
     });
 
   const vehicle = record?.vehicle || {};
-
   const vehicleInformation =
     record?.vehicle_information ||
     record?.key_information ||
     {};
-
   const operations =
     record?.operations ||
     record?.procedures ||
     {};
 
-  const title = useMemo(() => {
-    return [
-      vehicle.make,
-      vehicle.model,
-      vehicle.variant,
-    ]
-      .filter(Boolean)
-      .join(' ');
-  }, [vehicle]);
-
-  const sectionAvailability = useMemo(
-    () => ({
-      key_information:
-        hasObjectContent(vehicleInformation),
-      programming:
-        hasObjectContent(operations),
-      obd:
-        hasObjectContent(record?.obd) ||
-        hasObjectContent(
-          record?.wiring?.obd,
-        ) ||
-        hasTextMatch(operations, 'obd'),
-      eeprom:
-        hasObjectContent(record?.eeprom) ||
-        hasObjectContent(
-          record?.wiring?.eeprom,
-        ) ||
-        hasTextMatch(operations, 'eeprom'),
-      modules:
-        hasObjectContent(record?.modules),
-      tools:
-        hasToolsContent(record),
-      photos:
-        hasObjectContent(record?.photos),
-      notes:
-        Boolean(
-          record?.notes ||
-          vehicleInformation?.notes ||
-          record?.common_problems?.length,
-        ),
-    }),
-    [
-      record,
-      vehicleInformation,
-      operations,
-    ],
+  const title = useMemo(
+    () =>
+      [
+        vehicle.make,
+        vehicle.model,
+        vehicle.variant,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    [vehicle],
   );
 
   if (!record) {
@@ -139,21 +69,38 @@ export default function VehicleScreen({
           <Text style={styles.emptyTitle}>
             Vehicle record unavailable
           </Text>
-
           <Text style={styles.emptyText}>
-            This vehicle record could not be
-            loaded.
+            This vehicle record could not be loaded.
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  function toggleOperation(operationId) {
+  const availability = {
+    key_information: hasContent(vehicleInformation),
+    programming: hasContent(operations),
+    obd:
+      hasContent(record?.obd) ||
+      hasContent(record?.wiring?.obd) ||
+      hasText(operations, 'obd'),
+    eeprom:
+      hasContent(record?.eeprom) ||
+      hasContent(record?.wiring?.eeprom) ||
+      hasText(operations, 'eeprom'),
+    modules: hasContent(record?.modules),
+    tools: hasContent(extractTools(record)),
+    photos: hasContent(record?.photos),
+    notes:
+      hasContent(record?.notes) ||
+      hasContent(vehicleInformation?.notes) ||
+      hasContent(record?.common_problems),
+  };
+
+  function toggleOperation(id) {
     setOpenOperations((current) => ({
       ...current,
-      [operationId]:
-        !current[operationId],
+      [id]: !current[id],
     }));
   }
 
@@ -173,30 +120,20 @@ export default function VehicleScreen({
           </Text>
 
           <View style={styles.summaryRow}>
-            <SummaryBadge
-              text={vehicle.market || 'UK'}
-            />
-
-            <SummaryBadge
-              text={
-                vehicle.drive_side || 'RHD'
-              }
-            />
-
-            {vehicleInformation
-              .transponder_type ? (
-              <SummaryBadge
-                text={
-                  vehicleInformation
-                    .transponder_type
-                }
+            <Badge text={vehicle.market || 'UK'} />
+            <Badge text={vehicle.drive_side || 'RHD'} />
+            {vehicleInformation.transponder_type ? (
+              <Badge
+                text={vehicleInformation.transponder_type}
               />
             ) : null}
           </View>
         </View>
 
+        <QuickJobCard record={record} />
+
         <Text style={styles.dashboardTitle}>
-          Vehicle information
+          Full vehicle information
         </Text>
 
         <View style={styles.tileGrid}>
@@ -205,12 +142,8 @@ export default function VehicleScreen({
               key={tile.id}
               title={tile.title}
               icon={tile.icon}
-              available={
-                sectionAvailability[tile.id]
-              }
-              active={
-                activeSection === tile.id
-              }
+              available={availability[tile.id]}
+              active={activeSection === tile.id}
               onPress={() =>
                 setActiveSection(tile.id)
               }
@@ -218,9 +151,9 @@ export default function VehicleScreen({
           ))}
         </View>
 
-        <View style={styles.activeSectionCard}>
-          <View style={styles.activeSectionHeader}>
-            <View style={styles.activeSectionIcon}>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
               <AutomotiveIcon
                 name={
                   TILE_CONFIG.find(
@@ -233,7 +166,7 @@ export default function VehicleScreen({
               />
             </View>
 
-            <Text style={styles.activeSectionTitle}>
+            <Text style={styles.sectionTitle}>
               {
                 TILE_CONFIG.find(
                   (tile) =>
@@ -243,7 +176,7 @@ export default function VehicleScreen({
             </Text>
           </View>
 
-          {renderSection({
+          {renderActiveSection({
             activeSection,
             record,
             vehicleInformation,
@@ -259,7 +192,7 @@ export default function VehicleScreen({
   );
 }
 
-function renderSection({
+function renderActiveSection({
   activeSection,
   record,
   vehicleInformation,
@@ -273,28 +206,16 @@ function renderSection({
         <View>
           <InfoRow
             label="Immobiliser"
-            value={
-              vehicleInformation
-                .immobiliser_system
-            }
+            value={vehicleInformation.immobiliser_system}
           />
-
           <InfoRow
-            label="Immobiliser generation"
-            value={
-              vehicleInformation
-                .immobiliser_generation
-            }
+            label="Generation"
+            value={vehicleInformation.immobiliser_generation}
           />
-
           <InfoRow
             label="Transponder"
-            value={
-              vehicleInformation
-                .transponder_type
-            }
+            value={vehicleInformation.transponder_type}
           />
-
           <InfoRow
             label="Frequency"
             value={
@@ -303,25 +224,16 @@ function renderSection({
                 : ''
             }
           />
-
           <InfoRow
             label="Blade"
-            value={
-              vehicleInformation.blade_profile
-            }
+            value={vehicleInformation.blade_profile}
           />
-
           <InfoRow
             label="Key type"
-            value={
-              vehicleInformation.key_type
-            }
+            value={vehicleInformation.key_type}
           />
-
-          {!hasObjectContent(
-            vehicleInformation,
-          ) ? (
-            <EmptySectionText />
+          {!hasContent(vehicleInformation) ? (
+            <EmptySection />
           ) : null}
         </View>
       );
@@ -330,35 +242,23 @@ function renderSection({
       return (
         <View>
           <OperationSection
-            operationId="add_key"
             title="Add Key"
             operation={operations.add_key}
-            isOpen={
-              openOperations.add_key
-            }
+            isOpen={openOperations.add_key}
             onToggle={() =>
               toggleOperation('add_key')
             }
           />
-
           <OperationSection
-            operationId="all_keys_lost"
             title="All Keys Lost"
-            operation={
-              operations.all_keys_lost
-            }
-            isOpen={
-              openOperations.all_keys_lost
-            }
+            operation={operations.all_keys_lost}
+            isOpen={openOperations.all_keys_lost}
             onToggle={() =>
-              toggleOperation(
-                'all_keys_lost',
-              )
+              toggleOperation('all_keys_lost')
             }
           />
-
-          {!hasObjectContent(operations) ? (
-            <EmptySectionText />
+          {!hasContent(operations) ? (
+            <EmptySection />
           ) : null}
         </View>
       );
@@ -370,7 +270,7 @@ function renderSection({
             record?.obd ||
             record?.wiring?.obd
           }
-          emptyText="No dedicated OBD information has been added for this vehicle yet."
+          empty="No dedicated OBD information has been added yet."
         />
       );
 
@@ -381,7 +281,7 @@ function renderSection({
             record?.eeprom ||
             record?.wiring?.eeprom
           }
-          emptyText="No EEPROM or MCU information has been added for this vehicle yet."
+          empty="No EEPROM or MCU information has been added yet."
         />
       );
 
@@ -389,7 +289,7 @@ function renderSection({
       return (
         <GenericSection
           data={record?.modules}
-          emptyText="No module locations have been added for this vehicle yet."
+          empty="No module locations have been added yet."
         />
       );
 
@@ -397,7 +297,7 @@ function renderSection({
       return (
         <GenericSection
           data={extractTools(record)}
-          emptyText="No required tool information has been added for this vehicle yet."
+          empty="No required tool information has been added yet."
         />
       );
 
@@ -405,64 +305,24 @@ function renderSection({
       return (
         <GenericSection
           data={record?.photos}
-          emptyText="No reference photos have been added for this vehicle yet."
+          empty="No reference photos have been added yet."
         />
       );
 
     case 'notes':
       return (
-        <View>
-          {vehicleInformation.notes ? (
-            <Text style={styles.bodyText}>
-              {vehicleInformation.notes}
-            </Text>
-          ) : null}
-
-          {record?.notes ? (
-            <Text style={styles.bodyText}>
-              {normaliseDisplayValue(
-                record.notes,
-              )}
-            </Text>
-          ) : null}
-
-          {Array.isArray(
-            record?.common_problems,
-          ) ? (
-            <View style={styles.warningBox}>
-              <View style={styles.warningHeader}>
-                <Ionicons
-                  name="warning-outline"
-                  size={21}
-                  color="#FBBF24"
-                />
-
-                <Text style={styles.warningTitle}>
-                  Common problems
-                </Text>
-              </View>
-
-              {record.common_problems.map(
-                (problem, index) => (
-                  <BulletRow
-                    key={`problem-${index}`}
-                    text={problem}
-                  />
-                ),
-              )}
-            </View>
-          ) : null}
-
-          {!record?.notes &&
-          !vehicleInformation.notes &&
-          !record?.common_problems?.length ? (
-            <EmptySectionText text="No notes or warnings have been added for this vehicle yet." />
-          ) : null}
-        </View>
+        <GenericSection
+          data={
+            record?.notes ||
+            vehicleInformation?.notes ||
+            record?.common_problems
+          }
+          empty="No notes or warnings have been added yet."
+        />
       );
 
     default:
-      return <EmptySectionText />;
+      return <EmptySection />;
   }
 }
 
@@ -476,21 +336,17 @@ function DashboardTile({
   return (
     <Pressable
       style={({ pressed }) => [
-        styles.dashboardTile,
-        active && styles.dashboardTileActive,
-        pressed && styles.tilePressed,
+        styles.tile,
+        active && styles.tileActive,
+        pressed && styles.pressed,
       ]}
       onPress={onPress}
     >
-      <View style={styles.tileIconBox}>
+      <View style={styles.tileIcon}>
         <AutomotiveIcon
           name={icon}
-          size={47}
-          color={
-            active
-              ? '#FFFFFF'
-              : '#BFDBFE'
-          }
+          size={45}
+          color={active ? '#FFFFFF' : '#BFDBFE'}
         />
       </View>
 
@@ -503,7 +359,7 @@ function DashboardTile({
           styles.statusDot,
           available
             ? styles.availableDot
-            : styles.emptyDot,
+            : styles.noDataDot,
         ]}
       />
 
@@ -516,12 +372,10 @@ function DashboardTile({
 
 function GenericSection({
   data,
-  emptyText,
+  empty,
 }) {
-  if (!hasObjectContent(data)) {
-    return (
-      <EmptySectionText text={emptyText} />
-    );
+  if (!hasContent(data)) {
+    return <EmptySection text={empty} />;
   }
 
   if (Array.isArray(data)) {
@@ -529,10 +383,8 @@ function GenericSection({
       <View>
         {data.map((item, index) => (
           <BulletRow
-            key={`item-${index}`}
-            text={normaliseDisplayValue(
-              item,
-            )}
+            key={index}
+            text={displayValue(item)}
           />
         ))}
       </View>
@@ -557,9 +409,7 @@ function GenericSection({
           <InfoRow
             key={key}
             label={formatLabel(key)}
-            value={normaliseDisplayValue(
-              value,
-            )}
+            value={displayValue(value)}
           />
         ),
       )}
@@ -571,15 +421,7 @@ function InfoRow({
   label,
   value,
 }) {
-  if (
-    value === undefined ||
-    value === null ||
-    value === '' ||
-    (
-      Array.isArray(value) &&
-      value.length === 0
-    )
-  ) {
+  if (!hasContent(value)) {
     return null;
   }
 
@@ -588,9 +430,8 @@ function InfoRow({
       <Text style={styles.infoLabel}>
         {label}
       </Text>
-
       <Text style={styles.infoValue}>
-        {normaliseDisplayValue(value)}
+        {displayValue(value)}
       </Text>
     </View>
   );
@@ -602,15 +443,14 @@ function BulletRow({
   return (
     <View style={styles.bulletRow}>
       <View style={styles.bulletDot} />
-
       <Text style={styles.bulletText}>
-        {String(text)}
+        {text}
       </Text>
     </View>
   );
 }
 
-function EmptySectionText({
+function EmptySection({
   text = 'No information has been added to this section yet.',
 }) {
   return (
@@ -620,7 +460,6 @@ function EmptySectionText({
         size={25}
         color="#64748B"
       />
-
       <Text style={styles.emptySectionText}>
         {text}
       </Text>
@@ -628,12 +467,12 @@ function EmptySectionText({
   );
 }
 
-function SummaryBadge({
+function Badge({
   text,
 }) {
   return (
-    <View style={styles.summaryBadge}>
-      <Text style={styles.summaryBadgeText}>
+    <View style={styles.badge}>
+      <Text style={styles.badgeText}>
         {text}
       </Text>
     </View>
@@ -641,61 +480,42 @@ function SummaryBadge({
 }
 
 function formatYearRange(vehicle) {
-  const yearFrom = vehicle.year_from;
-  const yearTo = vehicle.year_to;
-
-  if (yearFrom && yearTo) {
-    return `${yearFrom}–${yearTo}`;
+  if (vehicle.year_from && vehicle.year_to) {
+    return `${vehicle.year_from}–${vehicle.year_to}`;
   }
-
-  if (yearFrom) {
-    return `${yearFrom} onwards`;
+  if (vehicle.year_from) {
+    return `${vehicle.year_from} onwards`;
   }
-
-  if (yearTo) {
-    return `Up to ${yearTo}`;
+  if (vehicle.year_to) {
+    return `Up to ${vehicle.year_to}`;
   }
-
   return 'Year range unknown';
 }
 
-function hasObjectContent(value) {
+function hasContent(value) {
   if (value === undefined || value === null) {
     return false;
   }
-
   if (typeof value === 'string') {
     return value.trim().length > 0;
   }
-
   if (Array.isArray(value)) {
     return value.length > 0;
   }
-
   if (typeof value === 'object') {
     return Object.keys(value).length > 0;
   }
-
   return true;
 }
 
-function hasTextMatch(
-  value,
-  phrase,
-) {
+function hasText(value, phrase) {
   try {
     return JSON.stringify(value)
       .toLowerCase()
-      .includes(phrase.toLowerCase());
+      .includes(phrase);
   } catch {
     return false;
   }
-}
-
-function hasToolsContent(record) {
-  return hasObjectContent(
-    extractTools(record),
-  );
 }
 
 function extractTools(record) {
@@ -703,43 +523,29 @@ function extractTools(record) {
     record?.tools ||
     record?.required_tools ||
     record?.tool_requirements ||
-    record?.procedures?.required_tools ||
     record?.operations?.required_tools ||
+    record?.procedures?.required_tools ||
     null
   );
 }
 
-function normaliseDisplayValue(value) {
-  if (
-    value === undefined ||
-    value === null
-  ) {
-    return '';
-  }
-
+function displayValue(value) {
   if (Array.isArray(value)) {
-    return value
-      .map(normaliseDisplayValue)
-      .filter(Boolean)
-      .join(', ');
+    return value.map(displayValue).join(', ');
   }
-
-  if (typeof value === 'object') {
+  if (value && typeof value === 'object') {
     return Object.entries(value)
       .map(
-        ([key, nestedValue]) =>
-          `${formatLabel(key)}: ${normaliseDisplayValue(
-            nestedValue,
-          )}`,
+        ([key, nested]) =>
+          `${formatLabel(key)}: ${displayValue(nested)}`,
       )
       .join('\n');
   }
-
-  return String(value);
+  return String(value ?? '');
 }
 
 function formatLabel(value) {
-  return String(value || '')
+  return String(value)
     .replace(/_/g, ' ')
     .replace(
       /\b\w/g,
@@ -762,7 +568,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#253047',
     padding: 18,
-    marginBottom: 18,
+    marginBottom: 14,
   },
   vehicleTitle: {
     color: '#F8FAFC',
@@ -780,13 +586,13 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 14,
   },
-  summaryBadge: {
+  badge: {
     borderRadius: 999,
     backgroundColor: '#1E293B',
     paddingHorizontal: 11,
     paddingVertical: 6,
   },
-  summaryBadgeText: {
+  badgeText: {
     color: '#BFDBFE',
     fontSize: 12,
     fontWeight: '800',
@@ -803,7 +609,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -5,
     marginBottom: 15,
   },
-  dashboardTile: {
+  tile: {
     width: '47%',
     aspectRatio: 1.05,
     margin: '1.5%',
@@ -815,24 +621,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dashboardTileActive: {
+  tileActive: {
     backgroundColor: '#1D4ED8',
     borderColor: '#60A5FA',
   },
-  tilePressed: {
-    opacity: 0.82,
-    transform: [
-      {
-        scale: 0.975,
-      },
-    ],
-  },
-  tileIconBox: {
-    width: 64,
-    height: 64,
+  tileIcon: {
+    width: 62,
+    height: 62,
     borderRadius: 18,
-    backgroundColor:
-      'rgba(37,99,235,0.18)',
+    backgroundColor: 'rgba(37,99,235,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -840,18 +637,18 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 16,
     fontWeight: '900',
-    marginTop: 9,
+    marginTop: 8,
   },
   statusDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    marginTop: 7,
+    marginTop: 6,
   },
   availableDot: {
     backgroundColor: '#22C55E',
   },
-  emptyDot: {
+  noDataDot: {
     backgroundColor: '#64748B',
   },
   statusText: {
@@ -860,19 +657,23 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 3,
   },
-  activeSectionCard: {
+  pressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.975 }],
+  },
+  sectionCard: {
     borderRadius: 19,
     backgroundColor: '#111827',
     borderWidth: 1,
     borderColor: '#283449',
     padding: 16,
   },
-  activeSectionHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 13,
   },
-  activeSectionIcon: {
+  sectionIcon: {
     width: 46,
     height: 46,
     borderRadius: 14,
@@ -880,7 +681,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activeSectionTitle: {
+  sectionTitle: {
     color: '#F8FAFC',
     fontSize: 20,
     fontWeight: '900',
@@ -909,7 +710,6 @@ const styles = StyleSheet.create({
   bodyText: {
     color: '#CBD5E1',
     lineHeight: 22,
-    marginBottom: 11,
   },
   bulletRow: {
     flexDirection: 'row',
@@ -928,24 +728,6 @@ const styles = StyleSheet.create({
     color: '#CBD5E1',
     flex: 1,
     lineHeight: 21,
-  },
-  warningBox: {
-    marginTop: 12,
-    padding: 13,
-    borderRadius: 14,
-    backgroundColor: '#422006',
-    borderWidth: 1,
-    borderColor: '#92400E',
-  },
-  warningHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  warningTitle: {
-    color: '#FDE68A',
-    fontWeight: '900',
-    marginLeft: 8,
   },
   emptySection: {
     paddingVertical: 22,
