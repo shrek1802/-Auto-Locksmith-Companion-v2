@@ -1,4 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, {
+  useMemo,
+  useState,
+} from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -7,68 +10,151 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
+import AutomotiveIcon from '../components/AutomotiveIcon';
 import OperationSection from '../components/OperationSection';
 
-export default function VehicleScreen({ route }) {
+const TILE_CONFIG = [
+  {
+    id: 'key_information',
+    title: 'Key Info',
+    icon: 'key',
+  },
+  {
+    id: 'programming',
+    title: 'Programming',
+    icon: 'programming',
+  },
+  {
+    id: 'obd',
+    title: 'OBD',
+    icon: 'obd',
+  },
+  {
+    id: 'eeprom',
+    title: 'EEPROM',
+    icon: 'chip',
+  },
+  {
+    id: 'modules',
+    title: 'Modules',
+    icon: 'modules',
+  },
+  {
+    id: 'tools',
+    title: 'Tools',
+    icon: 'tools',
+  },
+  {
+    id: 'photos',
+    title: 'Photos',
+    icon: 'photos',
+  },
+  {
+    id: 'notes',
+    title: 'Notes',
+    icon: 'notes',
+  },
+];
+
+export default function VehicleScreen({
+  route,
+}) {
   const { record } = route.params || {};
 
-  const [openSections, setOpenSections] = useState({
-    add_key: true,
-    all_keys_lost: false,
-  });
+  const [activeSection, setActiveSection] =
+    useState('key_information');
+
+  const [openOperations, setOpenOperations] =
+    useState({
+      add_key: true,
+      all_keys_lost: false,
+    });
 
   const vehicle = record?.vehicle || {};
-  const vehicleInformation = record?.vehicle_information || {};
-  const operations = record?.operations || {};
+
+  const vehicleInformation =
+    record?.vehicle_information ||
+    record?.key_information ||
+    {};
+
+  const operations =
+    record?.operations ||
+    record?.procedures ||
+    {};
 
   const title = useMemo(() => {
-    const parts = [vehicle.make, vehicle.model];
-
-    if (vehicle.variant) {
-      parts.push(vehicle.variant);
-    }
-
-    return parts.filter(Boolean).join(' ');
+    return [
+      vehicle.make,
+      vehicle.model,
+      vehicle.variant,
+    ]
+      .filter(Boolean)
+      .join(' ');
   }, [vehicle]);
 
-  function formatYearRange() {
-    const yearFrom = vehicle.year_from;
-    const yearTo = vehicle.year_to;
-
-    if (yearFrom && yearTo) {
-      return `${yearFrom}–${yearTo}`;
-    }
-
-    if (yearFrom) {
-      return `${yearFrom} onwards`;
-    }
-
-    if (yearTo) {
-      return `Up to ${yearTo}`;
-    }
-
-    return 'Year range unknown';
-  }
-
-  function toggleSection(sectionId) {
-    setOpenSections((current) => ({
-      ...current,
-      [sectionId]: !current[sectionId],
-    }));
-  }
+  const sectionAvailability = useMemo(
+    () => ({
+      key_information:
+        hasObjectContent(vehicleInformation),
+      programming:
+        hasObjectContent(operations),
+      obd:
+        hasObjectContent(record?.obd) ||
+        hasObjectContent(
+          record?.wiring?.obd,
+        ) ||
+        hasTextMatch(operations, 'obd'),
+      eeprom:
+        hasObjectContent(record?.eeprom) ||
+        hasObjectContent(
+          record?.wiring?.eeprom,
+        ) ||
+        hasTextMatch(operations, 'eeprom'),
+      modules:
+        hasObjectContent(record?.modules),
+      tools:
+        hasToolsContent(record),
+      photos:
+        hasObjectContent(record?.photos),
+      notes:
+        Boolean(
+          record?.notes ||
+          vehicleInformation?.notes ||
+          record?.common_problems?.length,
+        ),
+    }),
+    [
+      record,
+      vehicleInformation,
+      operations,
+    ],
+  );
 
   if (!record) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Vehicle record unavailable</Text>
+          <Text style={styles.emptyTitle}>
+            Vehicle record unavailable
+          </Text>
+
           <Text style={styles.emptyText}>
-            This vehicle record could not be loaded.
+            This vehicle record could not be
+            loaded.
           </Text>
         </View>
       </SafeAreaView>
     );
+  }
+
+  function toggleOperation(operationId) {
+    setOpenOperations((current) => ({
+      ...current,
+      [operationId]:
+        !current[operationId],
+    }));
   }
 
   return (
@@ -78,41 +164,135 @@ export default function VehicleScreen({ route }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroCard}>
-          <Text style={styles.vehicleTitle}>{title || 'Vehicle details'}</Text>
+          <Text style={styles.vehicleTitle}>
+            {title || 'Vehicle details'}
+          </Text>
 
-          <Text style={styles.yearRange}>{formatYearRange()}</Text>
+          <Text style={styles.yearRange}>
+            {formatYearRange(vehicle)}
+          </Text>
 
-          <View style={styles.marketRow}>
-            <View style={styles.marketBadge}>
-              <Text style={styles.marketBadgeText}>
-                {vehicle.market || 'UK'}
-              </Text>
-            </View>
+          <View style={styles.summaryRow}>
+            <SummaryBadge
+              text={vehicle.market || 'UK'}
+            />
 
-            <View style={styles.marketBadge}>
-              <Text style={styles.marketBadgeText}>
-                {vehicle.drive_side || 'RHD'}
-              </Text>
-            </View>
+            <SummaryBadge
+              text={
+                vehicle.drive_side || 'RHD'
+              }
+            />
+
+            {vehicleInformation
+              .transponder_type ? (
+              <SummaryBadge
+                text={
+                  vehicleInformation
+                    .transponder_type
+                }
+              />
+            ) : null}
           </View>
         </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Vehicle Information</Text>
+        <Text style={styles.dashboardTitle}>
+          Vehicle information
+        </Text>
 
+        <View style={styles.tileGrid}>
+          {TILE_CONFIG.map((tile) => (
+            <DashboardTile
+              key={tile.id}
+              title={tile.title}
+              icon={tile.icon}
+              available={
+                sectionAvailability[tile.id]
+              }
+              active={
+                activeSection === tile.id
+              }
+              onPress={() =>
+                setActiveSection(tile.id)
+              }
+            />
+          ))}
+        </View>
+
+        <View style={styles.activeSectionCard}>
+          <View style={styles.activeSectionHeader}>
+            <View style={styles.activeSectionIcon}>
+              <AutomotiveIcon
+                name={
+                  TILE_CONFIG.find(
+                    (tile) =>
+                      tile.id === activeSection,
+                  )?.icon
+                }
+                size={30}
+                color="#BFDBFE"
+              />
+            </View>
+
+            <Text style={styles.activeSectionTitle}>
+              {
+                TILE_CONFIG.find(
+                  (tile) =>
+                    tile.id === activeSection,
+                )?.title
+              }
+            </Text>
+          </View>
+
+          {renderSection({
+            activeSection,
+            record,
+            vehicleInformation,
+            operations,
+            openOperations,
+            toggleOperation,
+          })}
+        </View>
+
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function renderSection({
+  activeSection,
+  record,
+  vehicleInformation,
+  operations,
+  openOperations,
+  toggleOperation,
+}) {
+  switch (activeSection) {
+    case 'key_information':
+      return (
+        <View>
           <InfoRow
             label="Immobiliser"
-            value={vehicleInformation.immobiliser_system}
+            value={
+              vehicleInformation
+                .immobiliser_system
+            }
           />
 
           <InfoRow
             label="Immobiliser generation"
-            value={vehicleInformation.immobiliser_generation}
+            value={
+              vehicleInformation
+                .immobiliser_generation
+            }
           />
 
           <InfoRow
             label="Transponder"
-            value={vehicleInformation.transponder_type}
+            value={
+              vehicleInformation
+                .transponder_type
+            }
           />
 
           <InfoRow
@@ -126,130 +306,446 @@ export default function VehicleScreen({ route }) {
 
           <InfoRow
             label="Blade"
-            value={vehicleInformation.blade_profile}
+            value={
+              vehicleInformation.blade_profile
+            }
           />
 
           <InfoRow
             label="Key type"
-            value={vehicleInformation.key_type}
+            value={
+              vehicleInformation.key_type
+            }
           />
 
-          {vehicleInformation.notes ? (
-            <View style={styles.notesBox}>
-              <Text style={styles.notesLabel}>Notes</Text>
-              <Text style={styles.notesText}>
-                {vehicleInformation.notes}
-              </Text>
-            </View>
+          {!hasObjectContent(
+            vehicleInformation,
+          ) ? (
+            <EmptySectionText />
           ) : null}
         </View>
+      );
 
-        <OperationSection
-          operationId="add_key"
-          title="Add Key"
-          operation={operations.add_key}
-          isOpen={openSections.add_key}
-          onToggle={() => toggleSection('add_key')}
-        />
-
-        <OperationSection
-          operationId="all_keys_lost"
-          title="All Keys Lost"
-          operation={operations.all_keys_lost}
-          isOpen={openSections.all_keys_lost}
-          onToggle={() => toggleSection('all_keys_lost')}
-        />
-
-        {record?.common_problems?.length ? (
-          <ExpandableSimpleSection
-            title="Common Problems"
-            items={record.common_problems}
+    case 'programming':
+      return (
+        <View>
+          <OperationSection
+            operationId="add_key"
+            title="Add Key"
+            operation={operations.add_key}
+            isOpen={
+              openOperations.add_key
+            }
+            onToggle={() =>
+              toggleOperation('add_key')
+            }
           />
-        ) : null}
 
-        {record?.notes ? (
-          <ExpandableTextSection
-            title="Additional Notes"
-            text={record.notes}
+          <OperationSection
+            operationId="all_keys_lost"
+            title="All Keys Lost"
+            operation={
+              operations.all_keys_lost
+            }
+            isOpen={
+              openOperations.all_keys_lost
+            }
+            onToggle={() =>
+              toggleOperation(
+                'all_keys_lost',
+              )
+            }
           />
-        ) : null}
 
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
-    </SafeAreaView>
+          {!hasObjectContent(operations) ? (
+            <EmptySectionText />
+          ) : null}
+        </View>
+      );
+
+    case 'obd':
+      return (
+        <GenericSection
+          data={
+            record?.obd ||
+            record?.wiring?.obd
+          }
+          emptyText="No dedicated OBD information has been added for this vehicle yet."
+        />
+      );
+
+    case 'eeprom':
+      return (
+        <GenericSection
+          data={
+            record?.eeprom ||
+            record?.wiring?.eeprom
+          }
+          emptyText="No EEPROM or MCU information has been added for this vehicle yet."
+        />
+      );
+
+    case 'modules':
+      return (
+        <GenericSection
+          data={record?.modules}
+          emptyText="No module locations have been added for this vehicle yet."
+        />
+      );
+
+    case 'tools':
+      return (
+        <GenericSection
+          data={extractTools(record)}
+          emptyText="No required tool information has been added for this vehicle yet."
+        />
+      );
+
+    case 'photos':
+      return (
+        <GenericSection
+          data={record?.photos}
+          emptyText="No reference photos have been added for this vehicle yet."
+        />
+      );
+
+    case 'notes':
+      return (
+        <View>
+          {vehicleInformation.notes ? (
+            <Text style={styles.bodyText}>
+              {vehicleInformation.notes}
+            </Text>
+          ) : null}
+
+          {record?.notes ? (
+            <Text style={styles.bodyText}>
+              {normaliseDisplayValue(
+                record.notes,
+              )}
+            </Text>
+          ) : null}
+
+          {Array.isArray(
+            record?.common_problems,
+          ) ? (
+            <View style={styles.warningBox}>
+              <View style={styles.warningHeader}>
+                <Ionicons
+                  name="warning-outline"
+                  size={21}
+                  color="#FBBF24"
+                />
+
+                <Text style={styles.warningTitle}>
+                  Common problems
+                </Text>
+              </View>
+
+              {record.common_problems.map(
+                (problem, index) => (
+                  <BulletRow
+                    key={`problem-${index}`}
+                    text={problem}
+                  />
+                ),
+              )}
+            </View>
+          ) : null}
+
+          {!record?.notes &&
+          !vehicleInformation.notes &&
+          !record?.common_problems?.length ? (
+            <EmptySectionText text="No notes or warnings have been added for this vehicle yet." />
+          ) : null}
+        </View>
+      );
+
+    default:
+      return <EmptySectionText />;
+  }
+}
+
+function DashboardTile({
+  title,
+  icon,
+  available,
+  active,
+  onPress,
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.dashboardTile,
+        active && styles.dashboardTileActive,
+        pressed && styles.tilePressed,
+      ]}
+      onPress={onPress}
+    >
+      <View style={styles.tileIconBox}>
+        <AutomotiveIcon
+          name={icon}
+          size={47}
+          color={
+            active
+              ? '#FFFFFF'
+              : '#BFDBFE'
+          }
+        />
+      </View>
+
+      <Text style={styles.tileTitle}>
+        {title}
+      </Text>
+
+      <View
+        style={[
+          styles.statusDot,
+          available
+            ? styles.availableDot
+            : styles.emptyDot,
+        ]}
+      />
+
+      <Text style={styles.statusText}>
+        {available ? 'Available' : 'No data'}
+      </Text>
+    </Pressable>
   );
 }
 
-function InfoRow({ label, value }) {
+function GenericSection({
+  data,
+  emptyText,
+}) {
+  if (!hasObjectContent(data)) {
+    return (
+      <EmptySectionText text={emptyText} />
+    );
+  }
+
+  if (Array.isArray(data)) {
+    return (
+      <View>
+        {data.map((item, index) => (
+          <BulletRow
+            key={`item-${index}`}
+            text={normaliseDisplayValue(
+              item,
+            )}
+          />
+        ))}
+      </View>
+    );
+  }
+
+  if (
+    typeof data === 'string' ||
+    typeof data === 'number'
+  ) {
+    return (
+      <Text style={styles.bodyText}>
+        {String(data)}
+      </Text>
+    );
+  }
+
+  return (
+    <View>
+      {Object.entries(data).map(
+        ([key, value]) => (
+          <InfoRow
+            key={key}
+            label={formatLabel(key)}
+            value={normaliseDisplayValue(
+              value,
+            )}
+          />
+        ),
+      )}
+    </View>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+}) {
   if (
     value === undefined ||
     value === null ||
     value === '' ||
-    (Array.isArray(value) && value.length === 0)
+    (
+      Array.isArray(value) &&
+      value.length === 0
+    )
   ) {
     return null;
   }
 
-  const displayValue = Array.isArray(value) ? value.join(', ') : String(value);
-
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{displayValue}</Text>
+      <Text style={styles.infoLabel}>
+        {label}
+      </Text>
+
+      <Text style={styles.infoValue}>
+        {normaliseDisplayValue(value)}
+      </Text>
     </View>
   );
 }
 
-function ExpandableSimpleSection({ title, items }) {
-  const [open, setOpen] = useState(false);
-
+function BulletRow({
+  text,
+}) {
   return (
-    <View style={styles.expandableCard}>
-      <Pressable
-        style={styles.expandableHeader}
-        onPress={() => setOpen((current) => !current)}
-      >
-        <Text style={styles.expandableTitle}>{title}</Text>
-        <Text style={styles.chevron}>{open ? '⌃' : '⌄'}</Text>
-      </Pressable>
+    <View style={styles.bulletRow}>
+      <View style={styles.bulletDot} />
 
-      {open ? (
-        <View style={styles.expandableContent}>
-          {items.map((item, index) => (
-            <View
-              key={`${title}-${index}`}
-              style={styles.listItem}
-            >
-              <Text style={styles.bullet}>•</Text>
-              <Text style={styles.listText}>{String(item)}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
+      <Text style={styles.bulletText}>
+        {String(text)}
+      </Text>
     </View>
   );
 }
 
-function ExpandableTextSection({ title, text }) {
-  const [open, setOpen] = useState(false);
-
+function EmptySectionText({
+  text = 'No information has been added to this section yet.',
+}) {
   return (
-    <View style={styles.expandableCard}>
-      <Pressable
-        style={styles.expandableHeader}
-        onPress={() => setOpen((current) => !current)}
-      >
-        <Text style={styles.expandableTitle}>{title}</Text>
-        <Text style={styles.chevron}>{open ? '⌃' : '⌄'}</Text>
-      </Pressable>
+    <View style={styles.emptySection}>
+      <Ionicons
+        name="information-circle-outline"
+        size={25}
+        color="#64748B"
+      />
 
-      {open ? (
-        <View style={styles.expandableContent}>
-          <Text style={styles.additionalNotes}>{text}</Text>
-        </View>
-      ) : null}
+      <Text style={styles.emptySectionText}>
+        {text}
+      </Text>
     </View>
   );
+}
+
+function SummaryBadge({
+  text,
+}) {
+  return (
+    <View style={styles.summaryBadge}>
+      <Text style={styles.summaryBadgeText}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+function formatYearRange(vehicle) {
+  const yearFrom = vehicle.year_from;
+  const yearTo = vehicle.year_to;
+
+  if (yearFrom && yearTo) {
+    return `${yearFrom}–${yearTo}`;
+  }
+
+  if (yearFrom) {
+    return `${yearFrom} onwards`;
+  }
+
+  if (yearTo) {
+    return `Up to ${yearTo}`;
+  }
+
+  return 'Year range unknown';
+}
+
+function hasObjectContent(value) {
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === 'object') {
+    return Object.keys(value).length > 0;
+  }
+
+  return true;
+}
+
+function hasTextMatch(
+  value,
+  phrase,
+) {
+  try {
+    return JSON.stringify(value)
+      .toLowerCase()
+      .includes(phrase.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function hasToolsContent(record) {
+  return hasObjectContent(
+    extractTools(record),
+  );
+}
+
+function extractTools(record) {
+  return (
+    record?.tools ||
+    record?.required_tools ||
+    record?.tool_requirements ||
+    record?.procedures?.required_tools ||
+    record?.operations?.required_tools ||
+    null
+  );
+}
+
+function normaliseDisplayValue(value) {
+  if (
+    value === undefined ||
+    value === null
+  ) {
+    return '';
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map(normaliseDisplayValue)
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  if (typeof value === 'object') {
+    return Object.entries(value)
+      .map(
+        ([key, nestedValue]) =>
+          `${formatLabel(key)}: ${normaliseDisplayValue(
+            nestedValue,
+          )}`,
+      )
+      .join('\n');
+  }
+
+  return String(value);
+}
+
+function formatLabel(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(
+      /\b\w/g,
+      (character) =>
+        character.toUpperCase(),
+    );
 }
 
 const styles = StyleSheet.create({
@@ -261,12 +757,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   heroCard: {
-    borderRadius: 18,
+    borderRadius: 20,
     backgroundColor: '#111827',
     borderWidth: 1,
     borderColor: '#253047',
     padding: 18,
-    marginBottom: 14,
+    marginBottom: 18,
   },
   vehicleTitle: {
     color: '#F8FAFC',
@@ -278,42 +774,125 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 5,
   },
-  marketRow: {
+  summaryRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 14,
   },
-  marketBadge: {
+  summaryBadge: {
     borderRadius: 999,
     backgroundColor: '#1E293B',
     paddingHorizontal: 11,
     paddingVertical: 6,
   },
-  marketBadgeText: {
+  summaryBadgeText: {
     color: '#BFDBFE',
     fontSize: 12,
     fontWeight: '800',
   },
-  sectionCard: {
-    borderRadius: 16,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#253047',
-    padding: 16,
-    marginBottom: 14,
-  },
-  sectionTitle: {
+  dashboardTitle: {
     color: '#F8FAFC',
     fontSize: 18,
     fontWeight: '900',
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  tileGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -5,
+    marginBottom: 15,
+  },
+  dashboardTile: {
+    width: '47%',
+    aspectRatio: 1.05,
+    margin: '1.5%',
+    padding: 12,
+    borderRadius: 19,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#283449',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dashboardTileActive: {
+    backgroundColor: '#1D4ED8',
+    borderColor: '#60A5FA',
+  },
+  tilePressed: {
+    opacity: 0.82,
+    transform: [
+      {
+        scale: 0.975,
+      },
+    ],
+  },
+  tileIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor:
+      'rgba(37,99,235,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileTitle: {
+    color: '#F8FAFC',
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 9,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginTop: 7,
+  },
+  availableDot: {
+    backgroundColor: '#22C55E',
+  },
+  emptyDot: {
+    backgroundColor: '#64748B',
+  },
+  statusText: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  activeSectionCard: {
+    borderRadius: 19,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#283449',
+    padding: 16,
+  },
+  activeSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 13,
+  },
+  activeSectionIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#172554',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeSectionTitle: {
+    color: '#F8FAFC',
+    fontSize: 20,
+    fontWeight: '900',
+    marginLeft: 11,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 14,
+    paddingVertical: 11,
+    borderBottomWidth:
+      StyleSheet.hairlineWidth,
     borderBottomColor: '#253047',
   },
   infoLabel: {
@@ -322,75 +901,61 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     color: '#F8FAFC',
-    flex: 1.2,
+    flex: 1.25,
     textAlign: 'right',
     fontWeight: '700',
-  },
-  notesBox: {
-    marginTop: 14,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#0F172A',
-  },
-  notesLabel: {
-    color: '#93C5FD',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  notesText: {
-    color: '#CBD5E1',
     lineHeight: 20,
-    marginTop: 6,
   },
-  expandableCard: {
-    borderRadius: 16,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#253047',
-    marginBottom: 14,
-    overflow: 'hidden',
+  bodyText: {
+    color: '#CBD5E1',
+    lineHeight: 22,
+    marginBottom: 11,
   },
-  expandableHeader: {
-    minHeight: 58,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  expandableTitle: {
-    color: '#F8FAFC',
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  chevron: {
-    color: '#60A5FA',
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  expandableContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  listItem: {
+  bulletRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    marginTop: 9,
+  },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#60A5FA',
     marginTop: 8,
+    marginRight: 10,
   },
-  bullet: {
-    color: '#60A5FA',
-    marginRight: 9,
-    fontSize: 18,
-    lineHeight: 21,
-  },
-  listText: {
+  bulletText: {
     color: '#CBD5E1',
     flex: 1,
     lineHeight: 21,
   },
-  additionalNotes: {
-    color: '#CBD5E1',
+  warningBox: {
+    marginTop: 12,
+    padding: 13,
+    borderRadius: 14,
+    backgroundColor: '#422006',
+    borderWidth: 1,
+    borderColor: '#92400E',
+  },
+  warningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  warningTitle: {
+    color: '#FDE68A',
+    fontWeight: '900',
+    marginLeft: 8,
+  },
+  emptySection: {
+    paddingVertical: 22,
+    alignItems: 'center',
+  },
+  emptySectionText: {
+    color: '#94A3B8',
+    textAlign: 'center',
     lineHeight: 21,
+    marginTop: 8,
   },
   emptyState: {
     flex: 1,
@@ -409,6 +974,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   bottomSpacer: {
-    height: 24,
+    height: 28,
   },
 });
