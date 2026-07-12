@@ -8,43 +8,96 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function ModelsScreen({ route, navigation }) {
-  const { manufacturer, manufacturerData } = route.params || {};
+export default function ModelsScreen({
+  route,
+  navigation,
+}) {
+  const {
+    manufacturer,
+    manufacturerData,
+  } = route.params || {};
 
   const [search, setSearch] = useState('');
 
-  const records = Array.isArray(manufacturerData?.records)
+  const records = Array.isArray(
+    manufacturerData?.records,
+  )
     ? manufacturerData.records
     : [];
 
-  const groupedModels = useMemo(() => {
-    const groups = {};
+  const modelCards = useMemo(() => {
+    const query = search.trim().toLowerCase();
 
-    records.forEach((record) => {
-      const modelName = record?.vehicle?.model || 'Unknown model';
+    return records
+      .map((record, index) => {
+        const vehicle = record?.vehicle || {};
 
-      if (!groups[modelName]) {
-        groups[modelName] = [];
-      }
+        return {
+          id:
+            record?.record_id ||
+            [
+              vehicle.make,
+              vehicle.model,
+              vehicle.year_from,
+              vehicle.year_to,
+              vehicle.variant,
+              index,
+            ]
+              .filter(
+                (value) =>
+                  value !== undefined &&
+                  value !== null &&
+                  value !== '',
+              )
+              .join('_'),
+          record,
+          modelName:
+            vehicle.model ||
+            vehicle.model_name ||
+            'Unknown model',
+          variant:
+            vehicle.variant ||
+            vehicle.generation ||
+            '',
+          yearText: formatYearRange(record),
+        };
+      })
+      .filter((item) => {
+        if (!query) {
+          return true;
+        }
 
-      groups[modelName].push(record);
-    });
+        return [
+          item.modelName,
+          item.variant,
+          item.yearText,
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((first, second) => {
+        const modelComparison =
+          first.modelName.localeCompare(
+            second.modelName,
+          );
 
-    return Object.entries(groups)
-      .map(([modelName, modelRecords]) => ({
-        modelName,
-        records: modelRecords.sort((a, b) => {
-          const aYear = a?.vehicle?.year_from ?? 0;
-          const bYear = b?.vehicle?.year_from ?? 0;
+        if (modelComparison !== 0) {
+          return modelComparison;
+        }
 
-          return bYear - aYear;
-        }),
-      }))
-      .filter((item) =>
-        item.modelName.toLowerCase().includes(search.trim().toLowerCase())
-      )
-      .sort((a, b) => a.modelName.localeCompare(b.modelName));
+        const firstYear =
+          first.record?.vehicle?.year_from ??
+          0;
+
+        const secondYear =
+          second.record?.vehicle?.year_from ??
+          0;
+
+        return secondYear - firstYear;
+      });
   }, [records, search]);
 
   function openVehicle(record) {
@@ -53,30 +106,14 @@ export default function ModelsScreen({ route, navigation }) {
     });
   }
 
-  function formatYearRange(record) {
-    const yearFrom = record?.vehicle?.year_from;
-    const yearTo = record?.vehicle?.year_to;
-
-    if (yearFrom && yearTo) {
-      return `${yearFrom}–${yearTo}`;
-    }
-
-    if (yearFrom && !yearTo) {
-      return `${yearFrom} onwards`;
-    }
-
-    if (!yearFrom && yearTo) {
-      return `Up to ${yearTo}`;
-    }
-
-    return 'Year range unknown';
-  }
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <Text style={styles.title}>
-          {manufacturer?.name || manufacturerData?.manufacturer?.name || 'Models'}
+          {manufacturer?.name ||
+            manufacturerData?.manufacturer
+              ?.name ||
+            'Models'}
         </Text>
 
         <Text style={styles.subtitle}>
@@ -84,70 +121,152 @@ export default function ModelsScreen({ route, navigation }) {
         </Text>
       </View>
 
-      <TextInput
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Search model"
-        placeholderTextColor="#64748B"
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={styles.searchInput}
-      />
+      <View style={styles.searchBox}>
+        <Ionicons
+          name="search-outline"
+          size={21}
+          color="#64748B"
+        />
+
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search models or years"
+          placeholderTextColor="#64748B"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        {search.length > 0 ? (
+          <Pressable
+            onPress={() => setSearch('')}
+            hitSlop={10}
+          >
+            <Ionicons
+              name="close-circle"
+              size={22}
+              color="#64748B"
+            />
+          </Pressable>
+        ) : null}
+      </View>
 
       <FlatList
-        data={groupedModels}
-        keyExtractor={(item) => item.modelName}
-        contentContainerStyle={styles.listContent}
+        data={modelCards}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={
+          styles.listContent
+        }
+        columnWrapperStyle={
+          styles.columnWrapper
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No models found</Text>
+            <Ionicons
+              name="car-sport-outline"
+              size={52}
+              color="#475569"
+            />
+
+            <Text style={styles.emptyTitle}>
+              No models found
+            </Text>
 
             <Text style={styles.emptyText}>
-              There are no matching vehicle records for this manufacturer.
+              There are no matching vehicle
+              records for this manufacturer.
             </Text>
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.modelSection}>
-            <Text style={styles.modelTitle}>{item.modelName}</Text>
-
-            {item.records.map((record) => (
-              <Pressable
-                key={
-                  record.record_id ||
-                  `${record?.vehicle?.model}-${record?.vehicle?.year_from}-${record?.vehicle?.year_to}`
+          <Pressable
+            style={({ pressed }) => [
+              styles.modelCard,
+              pressed &&
+                styles.modelCardPressed,
+            ]}
+            onPress={() =>
+              openVehicle(item.record)
+            }
+          >
+            <View
+              style={
+                styles.vehicleIconContainer
+              }
+            >
+              <View
+                style={
+                  styles.vehicleIconHighlight
                 }
-                style={({ pressed }) => [
-                  styles.yearCard,
-                  pressed && styles.yearCardPressed,
-                ]}
-                onPress={() => openVehicle(record)}
+              />
+
+              <Ionicons
+                name="car-sport"
+                size={54}
+                color="#BFDBFE"
+              />
+            </View>
+
+            <Text
+              style={styles.modelName}
+              numberOfLines={2}
+            >
+              {item.modelName}
+            </Text>
+
+            <Text
+              style={styles.yearRange}
+              numberOfLines={1}
+            >
+              {item.yearText}
+            </Text>
+
+            {item.variant ? (
+              <Text
+                style={styles.variant}
+                numberOfLines={1}
               >
-                <View style={styles.yearCardText}>
-                  <Text style={styles.yearRange}>
-                    {formatYearRange(record)}
-                  </Text>
+                {item.variant}
+              </Text>
+            ) : null}
 
-                  {record?.vehicle?.variant ? (
-                    <Text style={styles.variant}>
-                      {record.vehicle.variant}
-                    </Text>
-                  ) : null}
-
-                  <Text style={styles.market}>
-                    UK · RHD
-                  </Text>
-                </View>
-
-                <Text style={styles.arrow}>›</Text>
-              </Pressable>
-            ))}
-          </View>
+            <View style={styles.marketPill}>
+              <Text
+                style={styles.marketPillText}
+              >
+                UK · RHD
+              </Text>
+            </View>
+          </Pressable>
         )}
       />
     </SafeAreaView>
   );
+}
+
+function formatYearRange(record) {
+  const yearFrom =
+    record?.vehicle?.year_from;
+
+  const yearTo =
+    record?.vehicle?.year_to;
+
+  if (yearFrom && yearTo) {
+    return `${yearFrom}–${yearTo}`;
+  }
+
+  if (yearFrom && !yearTo) {
+    return `${yearFrom} onwards`;
+  }
+
+  if (!yearFrom && yearTo) {
+    return `Up to ${yearTo}`;
+  }
+
+  return 'Year range unknown';
 }
 
 const styles = StyleSheet.create({
@@ -162,89 +281,152 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#F8FAFC',
-    fontSize: 24,
+    fontSize: 25,
     fontWeight: '900',
   },
   subtitle: {
     color: '#94A3B8',
+    fontSize: 15,
     marginTop: 4,
   },
-  searchInput: {
+  searchBox: {
+    minHeight: 52,
     marginHorizontal: 18,
     marginBottom: 14,
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#253047',
-    color: '#F8FAFC',
     paddingHorizontal: 14,
-  },
-  listContent: {
-    paddingHorizontal: 18,
-    paddingBottom: 30,
-  },
-  modelSection: {
-    marginBottom: 20,
-  },
-  modelTitle: {
-    color: '#F8FAFC',
-    fontSize: 19,
-    fontWeight: '900',
-    marginBottom: 9,
-  },
-  yearCard: {
-    minHeight: 76,
-    borderRadius: 14,
+    borderRadius: 15,
     backgroundColor: '#111827',
     borderWidth: 1,
     borderColor: '#253047',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginBottom: 9,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  yearCardPressed: {
-    opacity: 0.72,
-  },
-  yearCardText: {
+  searchInput: {
     flex: 1,
-    paddingRight: 12,
-  },
-  yearRange: {
     color: '#F8FAFC',
     fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+  },
+  listContent: {
+    paddingHorizontal: 13,
+    paddingBottom: 34,
+  },
+  columnWrapper: {
+    gap: 10,
+  },
+  modelCard: {
+    flex: 1,
+    aspectRatio: 1,
+    margin: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 15,
+    borderRadius: 21,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#283449',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 7,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  modelCardPressed: {
+    opacity: 0.82,
+    transform: [
+      {
+        scale: 0.975,
+      },
+    ],
+  },
+  vehicleIconContainer: {
+    width: 94,
+    height: 72,
+    overflow: 'hidden',
+    borderRadius: 20,
+    backgroundColor: '#172554',
+    borderWidth: 1,
+    borderColor: '#1D4ED8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  vehicleIconHighlight: {
+    position: 'absolute',
+    top: 4,
+    left: 6,
+    right: 6,
+    height: 29,
+    borderRadius: 15,
+    backgroundColor:
+      'rgba(255,255,255,0.06)',
+  },
+  modelName: {
+    width: '100%',
+    color: '#F8FAFC',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  yearRange: {
+    color: '#CBD5E1',
+    fontSize: 13,
     fontWeight: '800',
+    textAlign: 'center',
+    marginTop: 5,
   },
   variant: {
-    color: '#CBD5E1',
-    marginTop: 4,
-  },
-  market: {
-    color: '#64748B',
+    width: '100%',
+    color: '#94A3B8',
     fontSize: 12,
-    marginTop: 4,
+    textAlign: 'center',
+    marginTop: 3,
   },
-  arrow: {
-    color: '#60A5FA',
-    fontSize: 32,
-    lineHeight: 32,
+  marketPill: {
+    minHeight: 25,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    borderRadius: 13,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  marketPillText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '800',
   },
   emptyState: {
-    paddingVertical: 50,
+    paddingTop: 72,
+    paddingHorizontal: 34,
     alignItems: 'center',
   },
   emptyTitle: {
     color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 15,
   },
   emptyText: {
     color: '#94A3B8',
     textAlign: 'center',
-    marginTop: 7,
-    lineHeight: 20,
+    lineHeight: 22,
+    marginTop: 8,
   },
 });

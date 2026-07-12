@@ -1,118 +1,76 @@
 import React from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import Svg, {
-  Circle,
-  G,
-  Path,
-  Rect,
-} from 'react-native-svg';
+import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+import { siFord } from 'simple-icons/icons';
 
-const BRAND_COLOURS = {
-  audi: '#BB0A30',
-  bmw: '#1C69D4',
-  citroen: '#D71920',
-  cupra: '#C5A572',
-  dacia: '#4F7F63',
-  fiat: '#9D0B2F',
-  ford: '#003478',
-  honda: '#CC0000',
-  hyundai: '#002C5F',
-  jaguar: '#0E3C2C',
-  jeep: '#6B6B3C',
-  kia: '#D71920',
-  landrover: '#005A2B',
-  lexus: '#111111',
-  mazda: '#1D4E89',
-  mercedesbenz: '#111111',
-  mini: '#111111',
-  mitsubishi: '#E60012',
-  nissan: '#C3002F',
-  peugeot: '#1A3C7A',
-  porsche: '#A43131',
-  renault: '#F8D000',
-  seat: '#D71920',
-  skoda: '#4BA82E',
-  subaru: '#003B8F',
-  suzuki: '#E30613',
-  tesla: '#CC0000',
-  toyota: '#EB0A1E',
-  vauxhall: '#D71920',
-  volkswagen: '#001E50',
-  volvo: '#003057',
+const BRAND_CONFIG = {
+  ford: {
+    icon: siFord,
+    backgroundColor: '#003478',
+    logoColor: '#FFFFFF',
+  },
 };
 
 export default function BrandLogo({
   brand,
-  size = 54,
+  size = 96,
 }) {
-  const normalisedBrand = normaliseBrandName(brand);
-  const colour =
-    BRAND_COLOURS[normalisedBrand] ||
-    '#2563EB';
+  const brandId = normaliseBrandName(brand);
+  const config = BRAND_CONFIG[brandId];
+  const iconSize = Math.round(size * 0.7);
 
-  const initials = getInitials(brand);
-
-  return (
-    <View
-      style={[
-        styles.container,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-        },
-      ]}
-    >
-      <Svg
-        width={size}
-        height={size}
-        viewBox="0 0 100 100"
+  if (!config?.icon?.path) {
+    return (
+      <View
+        style={[
+          styles.tile,
+          {
+            width: size,
+            height: size,
+            borderRadius: Math.round(size * 0.23),
+            backgroundColor: '#1D4ED8',
+          },
+        ]}
       >
-        <Circle
-          cx="50"
-          cy="50"
-          r="47"
-          fill="#F8FAFC"
-          stroke={colour}
-          strokeWidth="6"
-        />
-
-        <G>
-          <Rect
-            x="19"
-            y="36"
-            width="62"
-            height="28"
-            rx="14"
-            fill={colour}
-          />
-
-          <Path
-            d="M30 50h40"
-            stroke="#FFFFFF"
-            strokeWidth="4"
-            strokeLinecap="round"
-            opacity="0.35"
-          />
-        </G>
-      </Svg>
-
-      <View style={styles.initialsOverlay}>
         <Text
           style={[
             styles.initials,
             {
-              fontSize: Math.max(12, size * 0.25),
+              fontSize: Math.round(size * 0.28),
             },
           ]}
         >
-          {initials}
+          {getInitials(brand)}
         </Text>
       </View>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.tile,
+        {
+          width: size,
+          height: size,
+          borderRadius: Math.round(size * 0.23),
+          backgroundColor: config.backgroundColor,
+        },
+      ]}
+    >
+      <View style={styles.topHighlight} />
+
+      <Svg
+        width={iconSize}
+        height={iconSize}
+        viewBox="0 0 24 24"
+        accessibilityLabel={`${brand} logo`}
+      >
+        <Path
+          d={config.icon.path}
+          fill={config.logoColor}
+        />
+      </Svg>
     </View>
   );
 }
@@ -134,9 +92,7 @@ function getInitials(value) {
   }
 
   if (words.length === 1) {
-    return words[0]
-      .slice(0, 2)
-      .toUpperCase();
+    return words[0].slice(0, 2).toUpperCase();
   }
 
   return words
@@ -147,18 +103,33 @@ function getInitials(value) {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  tile: {
     overflow: 'hidden',
-    position: 'relative',
-  },
-  initialsOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  topHighlight: {
+    position: 'absolute',
+    top: 5,
+    left: 7,
+    right: 7,
+    height: '42%',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.07)',
   },
   initials: {
     color: '#FFFFFF',
     fontWeight: '900',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
 });
