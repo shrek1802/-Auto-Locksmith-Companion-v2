@@ -3,6 +3,7 @@ import React, {
   useState,
 } from 'react';
 import {
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -32,7 +33,7 @@ export default function VehicleScreen({
 }) {
   const { record } = route.params || {};
   const [activeSection, setActiveSection] =
-    useState('key_information');
+    useState(null);
 
   const [openOperations, setOpenOperations] =
     useState({
@@ -143,7 +144,6 @@ export default function VehicleScreen({
               title={tile.title}
               icon={tile.icon}
               available={availability[tile.id]}
-              active={activeSection === tile.id}
               onPress={() =>
                 setActiveSection(tile.id)
               }
@@ -151,43 +151,99 @@ export default function VehicleScreen({
           ))}
         </View>
 
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionIcon}>
-              <AutomotiveIcon
-                name={
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+
+      <Modal
+        visible={Boolean(activeSection)}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() =>
+          setActiveSection(null)
+        }
+      >
+        <SafeAreaView style={styles.modalSafeArea}>
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHeaderText}>
+              <Text
+                style={styles.modalVehicleTitle}
+                numberOfLines={1}
+              >
+                {title || 'Vehicle details'}
+              </Text>
+
+              <Text style={styles.modalSectionName}>
+                {
                   TILE_CONFIG.find(
                     (tile) =>
                       tile.id === activeSection,
-                  )?.icon
+                  )?.title || ''
                 }
-                size={30}
-                color="#BFDBFE"
-              />
+              </Text>
             </View>
 
-            <Text style={styles.sectionTitle}>
-              {
-                TILE_CONFIG.find(
-                  (tile) =>
-                    tile.id === activeSection,
-                )?.title
+            <Pressable
+              style={({ pressed }) => [
+                styles.closeButton,
+                pressed && styles.pressed,
+              ]}
+              onPress={() =>
+                setActiveSection(null)
               }
-            </Text>
+              accessibilityLabel="Close section"
+            >
+              <Ionicons
+                name="close"
+                size={29}
+                color="#F8FAFC"
+              />
+            </Pressable>
           </View>
 
-          {renderActiveSection({
-            activeSection,
-            record,
-            vehicleInformation,
-            operations,
-            openOperations,
-            toggleOperation,
-          })}
-        </View>
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionIcon}>
+                  <AutomotiveIcon
+                    name={
+                      TILE_CONFIG.find(
+                        (tile) =>
+                          tile.id === activeSection,
+                      )?.icon
+                    }
+                    size={34}
+                    color="#BFDBFE"
+                  />
+                </View>
 
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
+                <Text style={styles.sectionTitle}>
+                  {
+                    TILE_CONFIG.find(
+                      (tile) =>
+                        tile.id === activeSection,
+                    )?.title || ''
+                  }
+                </Text>
+              </View>
+
+              {renderActiveSection({
+                activeSection,
+                record,
+                vehicleInformation,
+                operations,
+                openOperations,
+                toggleOperation,
+              })}
+            </View>
+
+            <View style={styles.modalBottomSpacer} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -330,14 +386,12 @@ function DashboardTile({
   title,
   icon,
   available,
-  active,
   onPress,
 }) {
   return (
     <Pressable
       style={({ pressed }) => [
         styles.tile,
-        active && styles.tileActive,
         pressed && styles.pressed,
       ]}
       onPress={onPress}
@@ -346,7 +400,7 @@ function DashboardTile({
         <AutomotiveIcon
           name={icon}
           size={45}
-          color={active ? '#FFFFFF' : '#BFDBFE'}
+          color="#BFDBFE"
         />
       </View>
 
@@ -621,10 +675,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tileActive: {
-    backgroundColor: '#1D4ED8',
-    borderColor: '#60A5FA',
-  },
   tileIcon: {
     width: 62,
     height: 62,
@@ -660,6 +710,50 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.82,
     transform: [{ scale: 0.975 }],
+  },
+  modalSafeArea: {
+    flex: 1,
+    backgroundColor: '#0B1220',
+  },
+  modalHeader: {
+    minHeight: 78,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#0F172A',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalHeaderText: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  modalVehicleTitle: {
+    color: '#F8FAFC',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  modalSectionName: {
+    color: '#93C5FD',
+    fontSize: 14,
+    marginTop: 2,
+  },
+  closeButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalContent: {
+    padding: 16,
   },
   sectionCard: {
     borderRadius: 19,
@@ -757,5 +851,8 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 28,
+  },
+  modalBottomSpacer: {
+    height: 30,
   },
 });
