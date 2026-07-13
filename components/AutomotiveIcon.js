@@ -30,10 +30,18 @@ export default function AutomotiveIcon({
     );
   }
 
+  if (name === 'modules') {
+    return (
+      <EcuModuleIcon
+        size={size}
+        color={color}
+      />
+    );
+  }
+
   const ioniconName = {
     key: 'key-outline',
     programming: 'construct-outline',
-    modules: 'location-outline',
     tools: 'briefcase-outline',
     photos: 'camera-outline',
     notes: 'document-text-outline',
@@ -206,3 +214,52 @@ function MicrochipIcon({
     </Svg>
   );
 }
+
+
+function EcuModuleIcon({
+  size,
+  color,
+}) {
+  const sidePins = [18, 27, 36, 45, 54];
+
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 72 72"
+      accessibilityLabel="Vehicle ECU control module"
+    >
+      <Rect
+        x="18"
+        y="18"
+        width="36"
+        height="36"
+        rx="5"
+        fill="none"
+        stroke={color}
+        strokeWidth="4"
+      />
+      <Rect
+        x="25"
+        y="25"
+        width="22"
+        height="22"
+        rx="3"
+        fill="none"
+        stroke={color}
+        strokeWidth="2.5"
+        opacity="0.8"
+      />
+      {sidePins.map((position) => (
+        <React.Fragment key={`ecu-${position}`}>
+          <Line x1="10" y1={position} x2="18" y2={position} stroke={color} strokeWidth="4" strokeLinecap="round" />
+          <Line x1="54" y1={position} x2="62" y2={position} stroke={color} strokeWidth="4" strokeLinecap="round" />
+        </React.Fragment>
+      ))}
+      <Circle cx="30" cy="36" r="2.2" fill={color} />
+      <Circle cx="36" cy="36" r="2.2" fill={color} />
+      <Circle cx="42" cy="36" r="2.2" fill={color} />
+    </Svg>
+  );
+          }
+          
