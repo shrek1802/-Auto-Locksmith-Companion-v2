@@ -13,12 +13,9 @@ export default function QuickJobCard({
   record,
 }) {
   const [expanded, setExpanded] = useState(true);
-  const [operationId, setOperationId] =
-    useState(getDefaultOperationId(record));
-
   const summary = useMemo(
-    () => buildQuickSummary(record, operationId),
-    [record, operationId],
+    () => buildQuickSummary(record),
+    [record],
   );
 
   return (
@@ -63,27 +60,6 @@ export default function QuickJobCard({
 
       {expanded ? (
         <View style={styles.content}>
-          <View style={styles.operationSwitch}>
-            <OperationButton
-              title="Add Key"
-              selected={operationId === 'add_key'}
-              available={summary.addKeyAvailable}
-              onPress={() =>
-                setOperationId('add_key')
-              }
-            />
-
-            <OperationButton
-              title="All Keys Lost"
-              selected={
-                operationId === 'all_keys_lost'
-              }
-              available={summary.aklAvailable}
-              onPress={() =>
-                setOperationId('all_keys_lost')
-              }
-            />
-          </View>
 
           <View style={styles.topSummary}>
             <SummaryMetric
@@ -223,46 +199,6 @@ export default function QuickJobCard({
   );
 }
 
-function OperationButton({
-  title,
-  selected,
-  available,
-  onPress,
-}) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.operationButton,
-        selected &&
-          styles.operationButtonSelected,
-        !available &&
-          styles.operationButtonUnavailable,
-        pressed && styles.pressed,
-      ]}
-      onPress={onPress}
-    >
-      <Text
-        style={[
-          styles.operationButtonText,
-          selected &&
-            styles.operationButtonTextSelected,
-        ]}
-      >
-        {title}
-      </Text>
-
-      <View
-        style={[
-          styles.operationStatusDot,
-          available
-            ? styles.availableDot
-            : styles.emptyDot,
-        ]}
-      />
-    </Pressable>
-  );
-}
-
 function SummaryMetric({
   icon,
   label,
@@ -356,7 +292,6 @@ function QuickRow({
 
 function buildQuickSummary(
   record,
-  operationId,
 ) {
   const vehicleInfo =
     record?.vehicle_information ||
@@ -368,18 +303,18 @@ function buildQuickSummary(
     record?.procedures ||
     {};
 
-  const operation =
-    operations?.[operationId] || {};
-
   const addKey =
     operations?.add_key || {};
 
   const allKeysLost =
     operations?.all_keys_lost || {};
 
+  const operation =
+    hasContent(addKey)
+      ? addKey
+      : allKeysLost;
+
   return {
-    addKeyAvailable: hasContent(addKey),
-    aklAvailable: hasContent(allKeysLost),
     difficulty:
       normaliseDifficulty(
         operation?.difficulty ||
@@ -410,9 +345,7 @@ function buildQuickSummary(
         ? 'Required'
         : operation?.working_key_required === false
           ? 'Not required'
-          : operationId === 'all_keys_lost'
-            ? 'Not available'
-            : 'Not stated',
+          : 'Not stated',
     transponder:
       firstValue(
         vehicleInfo.transponder_type,
@@ -689,17 +622,6 @@ function hasContent(value) {
   return Boolean(value);
 }
 
-function getDefaultOperationId(record) {
-  const operations =
-    record?.operations ||
-    record?.procedures ||
-    {};
-
-  return hasContent(operations?.add_key)
-    ? 'add_key'
-    : 'all_keys_lost';
-}
-
 const styles = StyleSheet.create({
   card: {
     overflow: 'hidden',
@@ -741,50 +663,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 14,
-  },
-  operationSwitch: {
-    flexDirection: 'row',
-    gap: 9,
-    marginBottom: 13,
-  },
-  operationButton: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 13,
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#334155',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    paddingHorizontal: 8,
-  },
-  operationButtonSelected: {
-    backgroundColor: '#1D4ED8',
-    borderColor: '#60A5FA',
-  },
-  operationButtonUnavailable: {
-    opacity: 0.58,
-  },
-  operationButtonText: {
-    color: '#CBD5E1',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  operationButtonTextSelected: {
-    color: '#FFFFFF',
-  },
-  operationStatusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  availableDot: {
-    backgroundColor: '#22C55E',
-  },
-  emptyDot: {
-    backgroundColor: '#64748B',
   },
   topSummary: {
     flexDirection: 'row',
@@ -945,3 +823,4 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
 });
+                  
