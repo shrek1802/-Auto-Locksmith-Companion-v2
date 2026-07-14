@@ -10,20 +10,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function ModelsScreen({
-  route,
-  navigation,
-}) {
-  const {
-    manufacturer,
-    manufacturerData,
-  } = route.params || {};
-
+export default function ModelsScreen({ route, navigation }) {
+  const { manufacturer, manufacturerData } = route.params || {};
   const [search, setSearch] = useState('');
 
-  const records = Array.isArray(
-    manufacturerData?.records,
-  )
+  const records = Array.isArray(manufacturerData?.records)
     ? manufacturerData.records
     : [];
 
@@ -47,62 +38,40 @@ export default function ModelsScreen({
             ]
               .filter(
                 (value) =>
-                  value !== undefined &&
-                  value !== null &&
-                  value !== '',
+                  value !== undefined && value !== null && value !== '',
               )
               .join('_'),
           record,
           modelName:
-            vehicle.model ||
-            vehicle.model_name ||
-            'Unknown model',
-          variant:
-            vehicle.variant ||
-            vehicle.generation ||
-            '',
+            vehicle.model || vehicle.model_name || 'Unknown model',
+          variant: vehicle.variant || vehicle.generation || '',
           yearText: formatYearRange(record),
         };
       })
       .filter((item) => {
-        if (!query) {
-          return true;
-        }
+        if (!query) return true;
 
-        return [
-          item.modelName,
-          item.variant,
-          item.yearText,
-        ]
+        return [item.modelName, item.variant, item.yearText]
           .join(' ')
           .toLowerCase()
           .includes(query);
       })
       .sort((first, second) => {
-        const modelComparison =
-          first.modelName.localeCompare(
-            second.modelName,
-          );
+        const modelComparison = first.modelName.localeCompare(
+          second.modelName,
+        );
 
-        if (modelComparison !== 0) {
-          return modelComparison;
-        }
+        if (modelComparison !== 0) return modelComparison;
 
-        const firstYear =
-          first.record?.vehicle?.year_from ??
-          0;
-
-        const secondYear =
-          second.record?.vehicle?.year_from ??
-          0;
-
+        const firstYear = first.record?.vehicle?.year_from ?? 0;
+        const secondYear = second.record?.vehicle?.year_from ?? 0;
         return secondYear - firstYear;
       });
   }, [records, search]);
 
   function openVehicle(record) {
     navigation.navigate('Vehicle', {
-      record,
+      record: normaliseRecord(record),
     });
   }
 
@@ -111,14 +80,10 @@ export default function ModelsScreen({
       <View style={styles.header}>
         <Text style={styles.title}>
           {manufacturer?.name ||
-            manufacturerData?.manufacturer
-              ?.name ||
+            manufacturerData?.manufacturer?.name ||
             'Models'}
         </Text>
-
-        <Text style={styles.subtitle}>
-          Select a model and year range
-        </Text>
+        <Text style={styles.subtitle}>Select a model and year range</Text>
       </View>
 
       <View style={styles.searchBox}>
@@ -127,7 +92,6 @@ export default function ModelsScreen({
           size={21}
           color="#64748B"
         />
-
         <TextInput
           style={styles.searchInput}
           value={search}
@@ -137,12 +101,8 @@ export default function ModelsScreen({
           autoCapitalize="none"
           autoCorrect={false}
         />
-
         {search.length > 0 ? (
-          <Pressable
-            onPress={() => setSearch('')}
-            hitSlop={10}
-          >
+          <Pressable onPress={() => setSearch('')} hitSlop={10}>
             <Ionicons
               name="close-circle"
               size={22}
@@ -157,12 +117,8 @@ export default function ModelsScreen({
         keyExtractor={(item) => item.id}
         numColumns={2}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={
-          styles.listContent
-        }
-        columnWrapperStyle={
-          styles.columnWrapper
-        }
+        contentContainerStyle={styles.listContent}
+        columnWrapperStyle={styles.columnWrapper}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons
@@ -170,14 +126,9 @@ export default function ModelsScreen({
               size={52}
               color="#475569"
             />
-
-            <Text style={styles.emptyTitle}>
-              No models found
-            </Text>
-
+            <Text style={styles.emptyTitle}>No models found</Text>
             <Text style={styles.emptyText}>
-              There are no matching vehicle
-              records for this manufacturer.
+              There are no matching vehicle records for this manufacturer.
             </Text>
           </View>
         }
@@ -185,60 +136,32 @@ export default function ModelsScreen({
           <Pressable
             style={({ pressed }) => [
               styles.modelCard,
-              pressed &&
-                styles.modelCardPressed,
+              pressed && styles.modelCardPressed,
             ]}
-            onPress={() =>
-              openVehicle(item.record)
-            }
+            onPress={() => openVehicle(item.record)}
           >
-            <View
-              style={
-                styles.vehicleIconContainer
-              }
-            >
-              <View
-                style={
-                  styles.vehicleIconHighlight
-                }
-              />
-
+            <View style={styles.vehicleIconContainer}>
+              <View style={styles.vehicleIconHighlight} />
               <Ionicons
                 name="car-sport"
-                size={54}
+                size={42}
                 color="#BFDBFE"
               />
             </View>
 
-            <Text
-              style={styles.modelName}
-              numberOfLines={2}
-            >
+            <Text style={styles.modelName} numberOfLines={2}>
               {item.modelName}
             </Text>
-
-            <Text
-              style={styles.yearRange}
-              numberOfLines={1}
-            >
+            <Text style={styles.yearRange} numberOfLines={1}>
               {item.yearText}
             </Text>
-
             {item.variant ? (
-              <Text
-                style={styles.variant}
-                numberOfLines={1}
-              >
+              <Text style={styles.variant} numberOfLines={2}>
                 {item.variant}
               </Text>
             ) : null}
-
             <View style={styles.marketPill}>
-              <Text
-                style={styles.marketPillText}
-              >
-                UK · RHD
-              </Text>
+              <Text style={styles.marketPillText}>UK · RHD</Text>
             </View>
           </Pressable>
         )}
@@ -247,25 +170,62 @@ export default function ModelsScreen({
   );
 }
 
+function normaliseRecord(record = {}) {
+  const vehicleInformation = record.vehicle_information || {};
+  const keyInformation = record.key_information || {
+    key_type: vehicleInformation.key_type,
+    blade_profile: vehicleInformation.blade_profile,
+    emergency_blade:
+      vehicleInformation.emergency_blade ||
+      vehicleInformation.blade_profile,
+    transponder_type: vehicleInformation.transponder_type,
+    frequency_mhz: vehicleInformation.frequency_mhz,
+    battery: vehicleInformation.battery,
+    buttons: vehicleInformation.buttons,
+  };
+
+  const security = record.security || {
+    family:
+      vehicleInformation.immobiliser_system ||
+      vehicleInformation.security_system,
+    platform:
+      record.vehicle?.platform || vehicleInformation.platform,
+    programming_module:
+      vehicleInformation.programming_module,
+    programming_route:
+      vehicleInformation.programming_route,
+    security_access:
+      vehicleInformation.immobiliser_generation,
+    online_requirement:
+      vehicleInformation.online_requirement,
+    fdrs_requirement:
+      vehicleInformation.fdrs_requirement,
+    gateway_requirement:
+      vehicleInformation.gateway_requirement,
+  };
+
+  return {
+    ...record,
+    key_information: keyInformation,
+    security,
+    operations: record.operations || record.procedures || {},
+    tools: record.tools || {},
+    modules: record.modules || {},
+    notes:
+      record.notes ||
+      (vehicleInformation.notes
+        ? { general: vehicleInformation.notes }
+        : {}),
+  };
+}
+
 function formatYearRange(record) {
-  const yearFrom =
-    record?.vehicle?.year_from;
+  const yearFrom = record?.vehicle?.year_from;
+  const yearTo = record?.vehicle?.year_to;
 
-  const yearTo =
-    record?.vehicle?.year_to;
-
-  if (yearFrom && yearTo) {
-    return `${yearFrom}–${yearTo}`;
-  }
-
-  if (yearFrom && !yearTo) {
-    return `${yearFrom} onwards`;
-  }
-
-  if (!yearFrom && yearTo) {
-    return `Up to ${yearTo}`;
-  }
-
+  if (yearFrom && yearTo) return `${yearFrom}–${yearTo}`;
+  if (yearFrom && !yearTo) return `${yearFrom} onwards`;
+  if (!yearFrom && yearTo) return `Up to ${yearTo}`;
   return 'Year range unknown';
 }
 
@@ -309,96 +269,84 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   listContent: {
-    paddingHorizontal: 13,
+    paddingHorizontal: 12,
     paddingBottom: 34,
   },
   columnWrapper: {
     gap: 10,
+    alignItems: 'stretch',
   },
   modelCard: {
     flex: 1,
-    aspectRatio: 1,
-    margin: 5,
+    minHeight: 245,
+    marginVertical: 5,
     paddingHorizontal: 12,
-    paddingVertical: 15,
-    borderRadius: 21,
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderRadius: 19,
     backgroundColor: '#111827',
     borderWidth: 1,
     borderColor: '#283449',
     alignItems: 'center',
-    justifyContent: 'center',
     shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 7,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
   modelCardPressed: {
     opacity: 0.82,
-    transform: [
-      {
-        scale: 0.975,
-      },
-    ],
+    transform: [{ scale: 0.98 }],
   },
   vehicleIconContainer: {
-    width: 94,
-    height: 72,
+    width: 82,
+    height: 62,
     overflow: 'hidden',
-    borderRadius: 20,
+    borderRadius: 18,
     backgroundColor: '#172554',
     borderWidth: 1,
     borderColor: '#1D4ED8',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-    shadowOpacity: 0.22,
-    shadowRadius: 8,
-    elevation: 5,
   },
   vehicleIconHighlight: {
     position: 'absolute',
     top: 4,
     left: 6,
     right: 6,
-    height: 29,
-    borderRadius: 15,
-    backgroundColor:
-      'rgba(255,255,255,0.06)',
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   modelName: {
     width: '100%',
+    minHeight: 48,
     color: '#F8FAFC',
-    fontSize: 18,
-    lineHeight: 22,
+    fontSize: 17,
+    lineHeight: 21,
     fontWeight: '900',
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: 10,
   },
   yearRange: {
     color: '#CBD5E1',
     fontSize: 13,
     fontWeight: '800',
     textAlign: 'center',
-    marginTop: 5,
+    marginTop: 3,
   },
   variant: {
     width: '100%',
+    minHeight: 34,
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 11.5,
+    lineHeight: 16,
     textAlign: 'center',
-    marginTop: 3,
+    marginTop: 4,
   },
   marketPill: {
     minHeight: 25,
-    marginTop: 8,
+    marginTop: 'auto',
     paddingHorizontal: 10,
     borderRadius: 13,
     backgroundColor: '#1E293B',
