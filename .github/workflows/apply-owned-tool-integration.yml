@@ -1,0 +1,45 @@
+name: Apply Owned Tool Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/apply_owned_tool_integration.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply integration
+        run: python tools/apply_owned_tool_integration.py
+
+      - name: Validate JavaScript package
+        run: |
+          npm install
+          npm run check
+
+      - name: Commit app changes
+        run: |
+          if git diff --quiet; then
+            echo 'No owned-tool changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '4189826+github-actions[bot]@users.noreply.github.com'
+          git add screens/SettingsScreen.js screens/VehicleScreen.js app.json
+          git commit -m 'app: integrate owned tools with vehicle support'
+          git push
