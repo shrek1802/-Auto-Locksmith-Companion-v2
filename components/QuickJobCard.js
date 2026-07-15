@@ -4,21 +4,36 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function QuickJobCard({ record }) {
   const vehicleInfo = record?.vehicle_information || {};
+  const programming = vehicleInfo.programming || {};
+
   const key = record?.key_information || {
     blade_profile: vehicleInfo.blade_profile,
     transponder_type: vehicleInfo.transponder_type,
+    transponder_id: vehicleInfo.transponder_id,
+    immobiliser_generation: vehicleInfo.immobiliser_generation,
     frequency_mhz: vehicleInfo.frequency_mhz,
     key_type: vehicleInfo.key_type,
     immobiliser_system: vehicleInfo.immobiliser_system,
   };
+
   const security = record?.security || {
     family: vehicleInfo.immobiliser_system,
     fdrs_requirement: vehicleInfo.fdrs_requirement,
-    online_requirement: vehicleInfo.online_requirement,
+    online_requirement:
+      vehicleInfo.online_requirement ?? programming.online_requirement,
   };
-  const operations = record?.operations || record?.procedures || {};
-  const addKey = operations.add_key || {};
-  const allKeysLost = operations.all_keys_lost || {};
+
+  // V2 model files store programming inside vehicle_information.programming.
+  // Older files may still use operations/procedures, so keep every fallback.
+  const operations = record?.operations || record?.procedures || {
+    add_key: programming.add_key,
+    all_keys_lost: programming.all_keys_lost,
+    online_requirement: programming.online_requirement,
+    route: programming.route,
+  };
+
+  const addKey = operations.add_key;
+  const allKeysLost = operations.all_keys_lost;
 
   return (
     <View style={styles.card}>
@@ -35,7 +50,7 @@ export default function QuickJobCard({ record }) {
       <View style={styles.content}>
         <View style={styles.grid}>
           <QuickValue label="Blade" value={key.blade_profile} />
-          <QuickValue label="Transponder" value={key.transponder_type} />
+          <QuickValue label="Transponder" value={formatTransponder(key)} />
           <QuickValue label="Frequency" value={formatFrequency(key.frequency_mhz)} />
           <QuickValue label="Key type" value={key.key_type} />
         </View>
@@ -47,10 +62,16 @@ export default function QuickJobCard({ record }) {
             label="Security"
             value={security.family || security.system || key.immobiliser_system}
           />
-          <OperationRow label="Online / FDRS" value={onlineSummary(security, operations)} />
+          <OperationRow
+            label="Online / FDRS"
+            value={onlineSummary(security, operations, programming)}
+          />
+          {hasContent(programming.route || operations.route) ? (
+            <OperationRow label="Programming route" value={programming.route || operations.route} />
+          ) : null}
         </View>
 
-        {!hasContent(operations) ? (
+        {!hasProgrammingContent(operations, programming) ? (
           <View style={styles.pendingBox}>
             <Ionicons name="time-outline" size={19} color="#93C5FD" />
             <Text style={styles.pendingText}>
@@ -74,7 +95,7 @@ function QuickValue({ label, value }) {
   return (
     <View style={styles.quickValue}>
       <Text style={styles.quickLabel}>{label}</Text>
-      <Text style={[styles.quickText, !hasContent(value) && styles.pendingValue]} numberOfLines={3}>
+      <Text style={[styles.quickText, !hasContent(value) && styles.pendingValue]} numberOfLines={4}>
         {display(value)}
       </Text>
     </View>
@@ -86,7 +107,7 @@ function OperationRow({ label, value }) {
   return (
     <View style={styles.operationRow}>
       <Text style={styles.operationLabel}>{label}</Text>
-      <Text style={[styles.operationValue, !available && styles.pendingValue]} numberOfLines={2}>
+      <Text style={[styles.operationValue, !available && styles.pendingValue]} numberOfLines={3}>
         {display(value)}
       </Text>
     </View>
@@ -95,29 +116,58 @@ function OperationRow({ label, value }) {
 
 function operationSummary(operation) {
   if (!hasContent(operation)) return '';
+  if (typeof operation === 'string') return operation;
   if (operation.supported === false) return 'Not supported';
   return (
     operation.method ||
     operation.programming_method ||
+    operation.route ||
     operation.status ||
+    operation.notes ||
     (operation.supported === true ? 'Supported' : 'See details')
   );
 }
 
-function onlineSummary(security, operations) {
+function onlineSummary(security, operations, programming) {
   const value =
     security.online_requirement ??
     security.fdrs_requirement ??
-    operations.online_requirement;
+    operations.online_requirement ??
+    programming.online_requirement;
   if (value === true) return 'Required';
   if (value === false) return 'Not required';
   return value || '';
 }
 
+function formatTransponder(key) {
+  const id = String(key?.transponder_id || '').toLowerCase();
+  const type = String(key?.transponder_type || '').trim();
+  const generation = String(key?.immobiliser_generation || '').trim();
+
+  if (id === 'nxp_hitag_pro' || /hitag pro|\bid47\b|\bid49\b/i.test(`${type} ${generation}`)) {
+    return 'NXP Original PCF7939FA 128-Bit HITAG Pro (ID47 / may read ID49)';
+  }
+
+  if (id === 'texas_4d63_80bit' && /dst80|80-bit|6f/i.test(`${type} ${generation}`)) {
+    return 'Texas 4D-63 80-Bit DST80 (ID63 / 6F)';
+  }
+
+  if (id === 'texas_4d63_40bit' || /4d-63.*40-bit/i.test(`${type} ${generation}`)) {
+    return 'Texas 4D-63 40-Bit';
+  }
+
+  if (id === 'texas_4d60') return 'Texas 4D-60 (ID60)';
+  if (id === 'texas_4c') return 'Texas 4C (ID4C)';
+  if (id === 'nxp_hitag2_id46') return 'NXP PCF7946 / HITAG2 ID46';
+  if (id === 'hitag_aes') return 'NXP HITAG AES 128-Bit';
+
+  return type || generation;
+}
+
 function firstWarning(record, addKey, allKeysLost) {
   const warnings = [
-    addKey.warnings,
-    allKeysLost.warnings,
+    typeof addKey === 'object' ? addKey?.warnings : null,
+    typeof allKeysLost === 'object' ? allKeysLost?.warnings : null,
     record?.notes?.warnings,
     record?.notes?.job_warning,
   ];
@@ -136,6 +186,19 @@ function formatFrequency(value) {
 
 function display(value) {
   return hasContent(value) ? String(value) : 'Awaiting verification';
+}
+
+function hasProgrammingContent(operations, programming) {
+  return [
+    operations?.add_key,
+    operations?.all_keys_lost,
+    operations?.route,
+    operations?.online_requirement,
+    programming?.add_key,
+    programming?.all_keys_lost,
+    programming?.route,
+    programming?.online_requirement,
+  ].some(hasContent);
 }
 
 function hasContent(value) {
