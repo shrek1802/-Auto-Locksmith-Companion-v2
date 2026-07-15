@@ -1,0 +1,43 @@
+name: Apply Owned Tool Support
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/apply_owned_tool_support.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply owned tool support
+        run: python tools/apply_owned_tool_support.py
+
+      - name: Validate app JSON
+        run: python -m json.tool app.json >/dev/null
+
+      - name: Commit changes
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add screens/SettingsScreen.js screens/VehicleScreen.js app.json
+          git commit -m 'app: match vehicle tools against owned tools'
+          git push
