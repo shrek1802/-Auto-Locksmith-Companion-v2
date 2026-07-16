@@ -23,12 +23,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       - name: Install dependencies
         run: npm install
@@ -78,12 +80,65 @@ jobs:
       - name: Generate Android project
         run: CI=1 npx expo prebuild --platform android --clean
 
+      - name: Remove unreliable Sonatype snapshot repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          roots = [Path('android'), Path('node_modules')]
+          patterns = ('*.gradle', '*.gradle.kts')
+          changed = []
+
+          for root in roots:
+              if not root.exists():
+                  continue
+              files = []
+              for pattern in patterns:
+                  files.extend(root.rglob(pattern))
+              for path in files:
+                  try:
+                      text = path.read_text(encoding='utf-8')
+                  except (UnicodeDecodeError, OSError):
+                      continue
+                  lines = text.splitlines()
+                  filtered = [
+                      line for line in lines
+                      if 'oss.sonatype.org/content/repositories/snapshots' not in line
+                  ]
+                  if filtered != lines:
+                      path.write_text('\n'.join(filtered) + '\n', encoding='utf-8')
+                      changed.append(str(path))
+
+          print(f'Removed Sonatype snapshots from {len(changed)} Gradle file(s).')
+          for path in changed:
+              print(path)
+          PY
+
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Build release APK
+      - name: Build release APK with dependency retry
         working-directory: android
-        run: ./gradlew assembleRelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            echo "Gradle build attempt $attempt of 3"
+            if ./gradlew assembleRelease --no-daemon --stacktrace; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Build failed; clearing failed dependency state before retry."
+              ./gradlew --stop || true
+              rm -rf ~/.gradle/caches/modules-2/files-2.1/com.facebook.fresco || true
+              rm -rf ~/.gradle/caches/modules-2/files-2.1/com.facebook.react || true
+              rm -rf ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin || true
+              sleep $((attempt * 20))
+            fi
+          done
+          exit 1
 
       - name: Prepare APK artifact
         shell: bash
