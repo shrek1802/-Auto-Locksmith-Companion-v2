@@ -23,13 +23,21 @@ export default function QuickJobCard({ record }) {
       vehicleInfo.online_requirement ?? programming.online_requirement,
   };
 
-  // V2 model files store programming inside vehicle_information.programming.
-  // Older files may still use operations/procedures, so keep every fallback.
-  const operations = record?.operations || record?.procedures || {
-    add_key: programming.add_key,
-    all_keys_lost: programming.all_keys_lost,
-    online_requirement: programming.online_requirement,
-    route: programming.route,
+  // Merge old and V2 layouts field-by-field. This prevents placeholder values in
+  // record.operations from hiding verified vehicle_information.programming data.
+  const legacyOperations = record?.operations || record?.procedures || {};
+  const operations = {
+    ...legacyOperations,
+    add_key: preferredOperation(legacyOperations.add_key, programming.add_key),
+    all_keys_lost: preferredOperation(
+      legacyOperations.all_keys_lost,
+      programming.all_keys_lost,
+    ),
+    online_requirement: preferredValue(
+      legacyOperations.online_requirement,
+      programming.online_requirement,
+    ),
+    route: preferredValue(legacyOperations.route, programming.route),
   };
 
   const addKey = operations.add_key;
@@ -66,8 +74,8 @@ export default function QuickJobCard({ record }) {
             label="Online / FDRS"
             value={onlineSummary(security, operations, programming)}
           />
-          {hasContent(programming.route || operations.route) ? (
-            <OperationRow label="Programming route" value={programming.route || operations.route} />
+          {hasContent(operations.route) ? (
+            <OperationRow label="Programming route" value={operations.route} />
           ) : null}
         </View>
 
@@ -114,26 +122,39 @@ function OperationRow({ label, value }) {
   );
 }
 
+function preferredOperation(primary, fallback) {
+  return hasVerifiedContent(primary) ? primary : fallback;
+}
+
+function preferredValue(primary, fallback) {
+  return hasVerifiedContent(primary) ? primary : fallback;
+}
+
 function operationSummary(operation) {
-  if (!hasContent(operation)) return '';
+  if (!hasVerifiedContent(operation)) return '';
   if (typeof operation === 'string') return operation;
   if (operation.supported === false) return 'Not supported';
   return (
-    operation.method ||
-    operation.programming_method ||
-    operation.route ||
-    operation.status ||
-    operation.notes ||
+    verifiedValue(operation.method) ||
+    verifiedValue(operation.method_text) ||
+    verifiedValue(operation.programming_method) ||
+    verifiedValue(operation.route) ||
+    verifiedValue(operation.summary) ||
+    verifiedValue(operation.procedure_summary) ||
+    verifiedValue(operation.status) ||
+    verifiedValue(operation.notes) ||
     (operation.supported === true ? 'Supported' : 'See details')
   );
 }
 
 function onlineSummary(security, operations, programming) {
-  const value =
-    security.online_requirement ??
-    security.fdrs_requirement ??
-    operations.online_requirement ??
-    programming.online_requirement;
+  const values = [
+    security.online_requirement,
+    security.fdrs_requirement,
+    operations.online_requirement,
+    programming.online_requirement,
+  ];
+  const value = values.find((item) => hasVerifiedContent(item));
   if (value === true) return 'Required';
   if (value === false) return 'Not required';
   return value || '';
@@ -147,20 +168,16 @@ function formatTransponder(key) {
   if (id === 'nxp_hitag_pro' || /hitag pro|\bid47\b|\bid49\b/i.test(`${type} ${generation}`)) {
     return 'NXP Original PCF7939FA 128-Bit HITAG Pro (ID47 / may read ID49)';
   }
-
   if (id === 'texas_4d63_80bit' && /dst80|80-bit|6f/i.test(`${type} ${generation}`)) {
     return 'Texas 4D-63 80-Bit DST80 (ID63 / 6F)';
   }
-
   if (id === 'texas_4d63_40bit' || /4d-63.*40-bit/i.test(`${type} ${generation}`)) {
     return 'Texas 4D-63 40-Bit';
   }
-
   if (id === 'texas_4d60') return 'Texas 4D-60 (ID60)';
   if (id === 'texas_4c') return 'Texas 4C (ID4C)';
   if (id === 'nxp_hitag2_id46') return 'NXP PCF7946 / HITAG2 ID46';
   if (id === 'hitag_aes') return 'NXP HITAG AES 128-Bit';
-
   return type || generation;
 }
 
@@ -185,7 +202,11 @@ function formatFrequency(value) {
 }
 
 function display(value) {
-  return hasContent(value) ? String(value) : 'Awaiting verification';
+  return hasVerifiedContent(value) ? String(value) : 'Awaiting verification';
+}
+
+function verifiedValue(value) {
+  return hasVerifiedContent(value) ? value : '';
 }
 
 function hasProgrammingContent(operations, programming) {
@@ -198,7 +219,24 @@ function hasProgrammingContent(operations, programming) {
     programming?.all_keys_lost,
     programming?.route,
     programming?.online_requirement,
-  ].some(hasContent);
+  ].some(hasVerifiedContent);
+}
+
+function hasVerifiedContent(value) {
+  if (!hasContent(value)) return false;
+  if (typeof value === 'string') {
+    const text = value.trim().toLowerCase();
+    return ![
+      'unknown',
+      'awaiting verification',
+      'verification required',
+      'not yet verified',
+      'confirm exact tool route',
+    ].includes(text);
+  }
+  if (Array.isArray(value)) return value.some(hasVerifiedContent);
+  if (typeof value === 'object') return Object.values(value).some(hasVerifiedContent);
+  return true;
 }
 
 function hasContent(value) {
