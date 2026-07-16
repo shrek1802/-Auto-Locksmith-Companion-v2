@@ -4,9 +4,27 @@ import json
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Markers let this migration safely run again after parts of the app have already
+# been updated manually or by an earlier workflow run.
+APPLIED_MARKERS = {
+    'Autel KM100X option': "id: 'autel_km100x'",
+    'Xhorse Key Tool Max Pro option': "id: 'xhorse_key_tool_max_pro'",
+    'Xtool X100 Pad 2 option': "id: 'xtool_x100_pad2'",
+    'React useEffect import': 'useEffect',
+    'AsyncStorage import': "@react-native-async-storage/async-storage",
+    'tool constants': 'const OWNED_TOOLS_STORAGE_KEY',
+    'owned tool state': 'const [ownedTools, setOwnedTools]',
+    'vehicle data fallbacks': 'const vehicleInformation = record.vehicle_information || {}',
+    'tool display builder': 'function buildToolDisplay(',
+}
+
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     if new in text:
+        return text
+    marker = APPLIED_MARKERS.get(label)
+    if marker and marker in text:
+        print(f'Skipping already-applied patch: {label}')
         return text
     if old not in text:
         raise SystemExit(f"Could not find patch target: {label}")
@@ -53,7 +71,7 @@ vehicle = replace_once(
 )
 vehicle = replace_once(
     vehicle,
-    "const TILE_CONFIG = [",
+    'const TILE_CONFIG = [',
     "const OWNED_TOOLS_STORAGE_KEY = '@locksmith_companion_owned_tools';\nconst SHOW_ONLY_OWNED_STORAGE_KEY = '@locksmith_companion_show_only_owned';\n\nconst TOOL_NAMES = {\n  autel_im508s: 'Autel IM508S + XP400 Pro',\n  autel_im508s_xp400_pro: 'Autel IM508S + XP400 Pro',\n  autel_km100x: 'Autel KM100X',\n  xhorse_key_tool_plus: 'Xhorse Key Tool Plus',\n  xhorse_key_tool_max_pro: 'Xhorse Key Tool Max Pro',\n  keydiy_kd_x4: 'KEYDIY KD-X4',\n  obdstar: 'OBDSTAR',\n  obdstar_g3: 'OBDSTAR G3',\n  xtool: 'Xtool',\n  xtool_x100_pad2: 'Xtool X100 Pad 2',\n  lonsdor: 'Lonsdor',\n  lonsdor_k518: 'Lonsdor K518',\n};\n\nconst TILE_CONFIG = [",
     'tool constants',
 )
@@ -71,19 +89,21 @@ vehicle = replace_once(
 )
 vehicle = replace_once(
     vehicle,
-    "function GenericSection({ data, empty }) {",
+    'function GenericSection({ data, empty }) {',
     "function buildToolDisplay(topLevelTools, vehicleInformation, ownedTools, showOnlyOwnedTools) {\n  const output = {};\n  const rawIds = Array.isArray(vehicleInformation?.tool_ids) ? vehicleInformation.tool_ids : [];\n  const topIds = Array.isArray(topLevelTools?.tool_ids) ? topLevelTools.tool_ids : [];\n  const ids = [...new Set([...rawIds, ...topIds])];\n\n  const normaliseOwned = (id) => {\n    if (id === 'autel_im508s') return 'autel_im508s_xp400_pro';\n    if (id === 'xtool') return 'xtool_x100_pad2';\n    if (id === 'obdstar') return 'obdstar_g3';\n    return id;\n  };\n\n  const rows = ids.map((id) => {\n    const selectedId = normaliseOwned(id);\n    return {\n      id,\n      name: TOOL_NAMES[id] || formatLabel(id),\n      owned: ownedTools.includes(selectedId) || ownedTools.includes(id),\n    };\n  });\n\n  const visibleRows = showOnlyOwnedTools ? rows.filter((item) => item.owned) : rows;\n  if (visibleRows.length) {\n    const owned = visibleRows.filter((item) => item.owned).map((item) => `✓ ${item.name}`);\n    const supported = visibleRows.filter((item) => !item.owned).map((item) => item.name);\n    if (owned.length) output['Your owned tools'] = owned;\n    if (supported.length) output['Also supported'] = supported;\n  }\n\n  if (vehicleInformation?.tool_or_cable_required) {\n    output['Connection / cable'] = vehicleInformation.tool_or_cable_required;\n  }\n  if (vehicleInformation?.programming?.route) {\n    output['Programming route'] = vehicleInformation.programming.route;\n  }\n  if (vehicleInformation?.programming?.online_requirement) {\n    output['Online / FDRS'] = vehicleInformation.programming.online_requirement;\n  }\n  if (vehicleInformation?.battery_type) {\n    output['Key battery'] = vehicleInformation.battery_type;\n  }\n\n  if (topLevelTools && typeof topLevelTools === 'object' && !Array.isArray(topLevelTools)) {\n    Object.entries(topLevelTools).forEach(([key, value]) => {\n      if (key !== 'tool_ids' && value !== undefined && value !== null && value !== '') {\n        output[key] = value;\n      }\n    });\n  }\n  return output;\n}\n\nfunction GenericSection({ data, empty }) {",
     'tool display builder',
 )
 vehicle_path.write_text(vehicle, encoding='utf-8')
 
-# Bump app version so the APK updater sees a new build.
+# Bump app version only when this migration still needs a newer version.
 app_json_path = ROOT / 'app.json'
 app = json.loads(app_json_path.read_text(encoding='utf-8'))
 expo = app['expo']
-expo['version'] = '2.0.3'
-expo['android']['versionCode'] = max(int(expo['android'].get('versionCode', 0)) + 1, 57)
-expo['ios']['buildNumber'] = str(expo['android']['versionCode'])
-app_json_path.write_text(json.dumps(app, indent=2) + '\n', encoding='utf-8')
+current_code = int(expo['android'].get('versionCode', 0))
+if current_code < 57:
+    expo['version'] = '2.0.3'
+    expo['android']['versionCode'] = 57
+    expo['ios']['buildNumber'] = '57'
+    app_json_path.write_text(json.dumps(app, indent=2) + '\n', encoding='utf-8')
 
 print('Owned-tool settings and vehicle tool display integration applied.')
