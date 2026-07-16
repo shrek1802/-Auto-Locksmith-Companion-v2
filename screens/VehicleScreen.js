@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -9,10 +9,29 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import AutomotiveIcon from '../components/AutomotiveIcon';
 import OperationSection from '../components/OperationSection';
 import QuickJobCard from '../components/QuickJobCard';
+
+const OWNED_TOOLS_STORAGE_KEY = '@locksmith_companion_owned_tools';
+const SHOW_ONLY_OWNED_STORAGE_KEY = '@locksmith_companion_show_only_owned';
+
+const TOOL_NAMES = {
+  autel_im508s: 'Autel IM508S + XP400 Pro',
+  autel_im508s_xp400_pro: 'Autel IM508S + XP400 Pro',
+  autel_km100x: 'Autel KM100X',
+  xhorse_key_tool_plus: 'Xhorse Key Tool Plus',
+  xhorse_key_tool_max_pro: 'Xhorse Key Tool Max Pro',
+  keydiy_kd_x4: 'KEYDIY KD-X4',
+  obdstar: 'OBDSTAR',
+  obdstar_g3: 'OBDSTAR G3',
+  xtool: 'Xtool',
+  xtool_x100_pad2: 'Xtool X100 Pad 2',
+  lonsdor: 'Lonsdor',
+  lonsdor_k518: 'Lonsdor K518',
+};
 
 const TILE_CONFIG = [
   { id: 'key_information', title: 'Key Info', icon: 'key' },
@@ -30,6 +49,26 @@ export default function VehicleScreen({ route }) {
     add_key: true,
     all_keys_lost: false,
   });
+  const [ownedTools, setOwnedTools] = useState([]);
+  const [showOnlyOwnedTools, setShowOnlyOwnedTools] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      AsyncStorage.getItem(OWNED_TOOLS_STORAGE_KEY),
+      AsyncStorage.getItem(SHOW_ONLY_OWNED_STORAGE_KEY),
+    ]).then(([storedTools, storedFilter]) => {
+      if (!active) return;
+      try {
+        const parsed = storedTools ? JSON.parse(storedTools) : [];
+        setOwnedTools(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setOwnedTools([]);
+      }
+      setShowOnlyOwnedTools(storedFilter === 'true');
+    });
+    return () => { active = false; };
+  }, []);
 
   if (!record) {
     return (
@@ -45,10 +84,15 @@ export default function VehicleScreen({ route }) {
   }
 
   const vehicle = record.vehicle || {};
-  const keyInformation = record.key_information || {};
-  const operations = record.operations || {};
-  const security = record.security || {};
-  const tools = record.tools || {};
+  const vehicleInformation = record.vehicle_information || {};
+  const keyInformation = record.key_information || vehicleInformation || {};
+  const operations = record.operations || record.procedures || vehicleInformation.programming || {};
+  const security = record.security || {
+    family: vehicleInformation.immobiliser_system,
+    programming_route: vehicleInformation.programming?.route,
+    online_requirement: vehicleInformation.programming?.online_requirement,
+  };
+  const tools = buildToolDisplay(record.tools, vehicleInformation, ownedTools, showOnlyOwnedTools);
   const modules = record.modules || {};
   const notes = record.notes || {};
 
@@ -345,6 +389,59 @@ function DashboardTile({ title, icon, available, onPress }) {
       </Text>
     </Pressable>
   );
+}
+
+function buildToolDisplay(topLevelTools, vehicleInformation, ownedTools, showOnlyOwnedTools) {
+  const output = {};
+  const rawIds = Array.isArray(vehicleInformation?.tool_ids) ? vehicleInformation.tool_ids : [];
+  const topIds = Array.isArray(topLevelTools?.tool_ids) ? topLevelTools.tool_ids : [];
+  const ids = [...new Set([...rawIds, ...topIds])];
+
+  const normaliseOwned = (id) => {
+    if (id === 'autel_im508s') return 'autel_im508s_xp400_pro';
+    if (id === 'xtool') return 'xtool_x100_pad2';
+    if (id === 'obdstar') return 'obdstar_g3';
+    return id;
+  };
+
+  const rows = ids.map((id) => {
+    const selectedId = normaliseOwned(id);
+    return {
+      id,
+      name: TOOL_NAMES[id] || formatLabel(id),
+      owned: ownedTools.includes(selectedId) || ownedTools.includes(id),
+    };
+  });
+
+  const visibleRows = showOnlyOwnedTools ? rows.filter((item) => item.owned) : rows;
+  if (visibleRows.length) {
+    const owned = visibleRows.filter((item) => item.owned).map((item) => `✓ ${item.name}`);
+    const supported = visibleRows.filter((item) => !item.owned).map((item) => item.name);
+    if (owned.length) output['Your owned tools'] = owned;
+    if (supported.length) output['Also supported'] = supported;
+  }
+
+  if (vehicleInformation?.tool_or_cable_required) {
+    output['Connection / cable'] = vehicleInformation.tool_or_cable_required;
+  }
+  if (vehicleInformation?.programming?.route) {
+    output['Programming route'] = vehicleInformation.programming.route;
+  }
+  if (vehicleInformation?.programming?.online_requirement) {
+    output['Online / FDRS'] = vehicleInformation.programming.online_requirement;
+  }
+  if (vehicleInformation?.battery_type) {
+    output['Key battery'] = vehicleInformation.battery_type;
+  }
+
+  if (topLevelTools && typeof topLevelTools === 'object' && !Array.isArray(topLevelTools)) {
+    Object.entries(topLevelTools).forEach(([key, value]) => {
+      if (key !== 'tool_ids' && value !== undefined && value !== null && value !== '') {
+        output[key] = value;
+      }
+    });
+  }
+  return output;
 }
 
 function GenericSection({ data, empty }) {
