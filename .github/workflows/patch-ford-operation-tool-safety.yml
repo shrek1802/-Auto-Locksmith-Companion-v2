@@ -1,0 +1,55 @@
+name: Patch Ford operation tool safety
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/patch_ford_operation_tool_safety.py'
+      - '.github/workflows/patch-ford-operation-tool-safety.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply safety patch
+        run: python tools/patch_ford_operation_tool_safety.py
+
+      - name: Validate adapter safety rules
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('services/vehicleDisplayAdapter.js').read_text(encoding='utf-8')
+          assert 'FORD_TOOL_PROFILES' not in text
+          assert 'inferFordProfile' not in text
+          assert 'Compatible with this Ford security family' not in text
+          assert 'operation not implied' in text
+          assert 'never infer operation support' in text
+          assert 'isRestrictedSecurityRecord' in text
+          print('Ford operation-specific tool safety checks passed.')
+          PY
+
+      - name: Commit app safety fix
+        run: |
+          if git diff --quiet; then
+            echo 'No changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add services/vehicleDisplayAdapter.js
+          git commit -m 'fix: require operation-specific tool support for Ford'
+          git push
