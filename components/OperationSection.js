@@ -65,6 +65,18 @@ export default function OperationSection({
             />
           ) : null}
 
+          {operation?.method_text ? (
+            <InfoRow label="Method" value={operation.method_text} />
+          ) : null}
+
+          {operation?.programming_method ? (
+            <InfoRow label="Programming route" value={operation.programming_method} />
+          ) : null}
+
+          {operation?.online_requirement ? (
+            <InfoRow label="Online / FDRS" value={operation.online_requirement} />
+          ) : null}
+
           {operation?.estimated_minutes ? (
             <InfoRow
               label="Estimated time"
