@@ -29,30 +29,6 @@ const PLACEHOLDERS = new Set([
   'tbc',
 ]);
 
-const FORD_TOOL_PROFILES = {
-  legacy: [
-    'autel_im508s_xp400_pro', 'autel_im608_pro', 'autel_km100x',
-    'xhorse_key_tool_plus', 'xhorse_vvdi2', 'xtool_x100_pad2',
-    'obdstar_g3', 'obdstar_x300_dp_plus', 'lonsdor_k518_pro',
-    'smart_pro', 'zed_full',
-  ],
-  pats_4d: [
-    'autel_im508s_xp400_pro', 'autel_im608_pro', 'autel_km100x',
-    'xhorse_key_tool_plus', 'xhorse_vvdi2', 'xtool_x100_pad2',
-    'obdstar_g3', 'obdstar_x300_dp_plus', 'lonsdor_k518_pro',
-    'smart_pro', 'zed_full',
-  ],
-  hitag_pro: [
-    'autel_im508s_xp400_pro', 'autel_im608_pro', 'autel_km100x',
-    'xhorse_key_tool_plus', 'xtool_x100_pad2', 'obdstar_g3',
-    'obdstar_x300_dp_plus', 'lonsdor_k518_pro', 'smart_pro',
-  ],
-  modern_online: [
-    'autel_im508s_xp400_pro', 'autel_im608_pro', 'xhorse_key_tool_plus',
-    'obdstar_g3', 'lonsdor_k518_pro', 'smart_pro',
-  ],
-};
-
 function canonicalToolId(value) {
   const raw = String(value || '').trim().toLowerCase();
   return normaliseToolId(LEGACY_ALIASES[raw] || raw);
@@ -159,20 +135,6 @@ function toolName(id) {
     .join(' ');
 }
 
-function inferFordProfile(record) {
-  const info = record?.vehicle_information || {};
-  const vehicle = record?.vehicle || {};
-  const text = [
-    info.immobiliser_system, info.immobiliser_generation, info.transponder_type,
-    info.key_type, vehicle.generation, info.programming?.route,
-  ].filter(Boolean).join(' ').toLowerCase();
-  const year = Number(vehicle.year_from || 0);
-  if (text.includes('fdrs') || text.includes('can fd') || year >= 2024) return 'modern_online';
-  if (text.includes('pcf7939') || text.includes('hitag') || text.includes('id47') || text.includes('id49')) return 'hitag_pro';
-  if (text.includes('4d') || text.includes('dst80') || text.includes('id63')) return 'pats_4d';
-  return 'legacy';
-}
-
 function collectToolIds(record) {
   const info = record?.vehicle_information || {};
   const tools = record?.tools || {};
@@ -186,10 +148,6 @@ function collectToolIds(record) {
   });
   if (Array.isArray(tools.supported_tools)) {
     tools.supported_tools.forEach((item) => add(item?.id || item?.tool_id));
-  }
-  if (String(record?.vehicle?.make || '').toLowerCase() === 'ford') {
-    FORD_TOOL_PROFILES[inferFordProfile(record)].forEach(add);
-    ['xhorse_key_tool_max_pro', 'keydiy_kd_x4'].forEach(add);
   }
   return ids;
 }
@@ -207,9 +165,14 @@ export function buildVehicleToolDisplay(record, ownedTools, showOnlyOwnedTools) 
   const output = {};
   const ownedNames = visible.filter((id) => owned.has(id)).map((id) => `✓ ${toolName(id)}`);
   const otherNames = visible.filter((id) => !owned.has(id)).map(toolName);
-  if (ownedNames.length) output['Your owned tools'] = ownedNames;
-  if (otherNames.length) output['Also compatible'] = otherNames;
-  if (showOnlyOwnedTools && !ownedNames.length) output['Your owned tools'] = 'No selected tool is listed for this vehicle.';
+  if (ownedNames.length) output['Your listed tools (operation not implied)'] = ownedNames;
+  if (otherNames.length) output['Other listed tools (operation not implied)'] = otherNames;
+  if (showOnlyOwnedTools && !ownedNames.length) {
+    output['Your listed tools (operation not implied)'] = 'No selected tool is explicitly listed for this vehicle.';
+  }
+  if (String(record?.vehicle?.make || '').toLowerCase() === 'ford') {
+    output['Tool safety'] = 'A listed tool is not proof of Add Key or All Keys Lost support. Check the operation-specific tool status, exact build/security platform and current software before accepting the job.';
+  }
 
   const connection = top.connection_or_adapter || top['Connection / cable'] || info.tool_or_cable_required;
   const route = top.programming_route || top['Programming route'] || info.programming?.route;
@@ -217,6 +180,8 @@ export function buildVehicleToolDisplay(record, ownedTools, showOnlyOwnedTools) 
   if (hasValue(connection)) output['Connection / cable'] = connection;
   if (hasValue(route)) output['Programming route'] = route;
   if (hasValue(online)) output['Online / FDRS'] = online;
+  const securityAccess = info.security_access || info.programming?.security_access || record?.security?.security_access;
+  if (hasValue(securityAccess)) output['Security access'] = securityAccess;
   if (hasValue(info.battery_type)) output['Key battery'] = info.battery_type;
   return output;
 }
@@ -243,19 +208,24 @@ function operationToolMap(record, operation, ownedTools, showOnlyOwnedTools) {
       };
     });
   }
-  collectToolIds(record).forEach((id) => {
-    if (result[id] || (showOnlyOwnedTools && !owned.has(id))) return;
-    const generationOnly = KEY_GENERATION_ONLY.has(id);
-    result[id] = {
-      display_name: toolName(id),
-      status: generationOnly ? 'conditional' : 'supported',
-      method: generationOnly ? 'transponder_clone' : 'obd',
-      summary: generationOnly
-        ? 'Key/remote generation support; use a vehicle programmer for immobiliser learning.'
-        : 'Compatible with this Ford security family. Confirm the exact year and current tool software menu.',
-    };
-  });
+  // Safety: never infer operation support from record-level or manufacturer-level tool lists.
+  // Add Key / AKL tools must be explicitly defined on the operation itself.
   return result;
+}
+
+function isRestrictedSecurityRecord(record) {
+  const info = record?.vehicle_information || {};
+  const vehicle = record?.vehicle || {};
+  const text = [
+    info.immobiliser_system, info.immobiliser_generation, info.platform,
+    info.transponder_type, info.programming?.route, info.programming?.online_requirement,
+    info.security_access, vehicle.generation, vehicle.variant,
+  ].filter(Boolean).join(' ').toLowerCase();
+  const year = Number(vehicle.year_from || 0);
+  return year >= 2022 || [
+    'mqb49', 'mqb', 'meb', 'fdrs', 'can fd', 'can-fd', 'doip', 'sfd',
+    'online security', 'authorised online', 'shared volkswagen', 'volkswagen',
+  ].some((term) => text.includes(term));
 }
 
 function normaliseOperation(record, operationId, ownedTools, showOnlyOwnedTools) {
@@ -280,9 +250,11 @@ function normaliseOperation(record, operationId, ownedTools, showOnlyOwnedTools)
     tools,
     overall_status: validStatus
       ? explicitStatus
-      : meaningfulMethod || Object.keys(tools).length
-        ? 'supported'
-        : 'verification_required',
+      : isRestrictedSecurityRecord(record)
+        ? (Object.keys(tools).length ? 'conditional' : 'verification_required')
+        : meaningfulMethod || Object.keys(tools).length
+          ? 'supported'
+          : 'verification_required',
   };
 }
 
