@@ -67,15 +67,15 @@ export default function QuickJobCard({ record }) {
           <OperationRow label="Add Key" value={operationSummary(addKey)} />
           <OperationRow label="All Keys Lost" value={operationSummary(allKeysLost)} />
           <OperationRow
-            label="Security"
+            label="Immobiliser System"
             value={security.family || security.system || key.immobiliser_system}
           />
           <OperationRow
-            label="Online / FDRS"
+            label="Online / Server Access"
             value={onlineSummary(security, operations, programming)}
           />
           {hasContent(operations.route) ? (
-            <OperationRow label="Programming route" value={operations.route} />
+            <OperationRow label="Programming Method" value={operations.route} />
           ) : null}
         </View>
 
@@ -83,7 +83,7 @@ export default function QuickJobCard({ record }) {
           <View style={styles.pendingBox}>
             <Ionicons name="time-outline" size={19} color="#93C5FD" />
             <Text style={styles.pendingText}>
-              Programming procedures are awaiting technical verification.
+              Programming procedures are still to be verified.
             </Text>
           </View>
         ) : null}
@@ -156,7 +156,7 @@ function onlineSummary(security, operations, programming) {
   ];
   const value = values.find((item) => hasVerifiedContent(item));
   if (value === true) return 'Required';
-  if (value === false) return 'Not required';
+  if (value === false) return 'Not Required';
   return value || '';
 }
 
@@ -202,7 +202,7 @@ function formatFrequency(value) {
 }
 
 function display(value) {
-  return hasVerifiedContent(value) ? String(value) : 'Awaiting verification';
+  return hasVerifiedContent(value) ? String(value) : 'To Be Verified';
 }
 
 function verifiedValue(value) {
