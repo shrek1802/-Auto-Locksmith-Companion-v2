@@ -12,6 +12,7 @@ import { DatabaseProvider } from './context/DatabaseContext';
 
 import ManufacturersScreen from './screens/ManufacturersScreen';
 import ModelsScreen from './screens/ModelsScreen';
+import ModelFamilyScreen from './screens/ModelFamilyScreen';
 import VehicleScreen from './screens/VehicleScreen';
 import SettingsScreen from './screens/SettingsScreen';
 
@@ -65,6 +66,14 @@ export default function App() {
             component={ModelsScreen}
             options={({ route }) => ({
               title: route.params?.manufacturer?.name || 'Models',
+            })}
+          />
+
+          <Stack.Screen
+            name="ModelFamily"
+            component={ModelFamilyScreen}
+            options={({ route }) => ({
+              title: route.params?.familyName || 'Model family',
             })}
           />
 
