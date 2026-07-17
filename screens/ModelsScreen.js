@@ -18,60 +18,67 @@ export default function ModelsScreen({ route, navigation }) {
     ? manufacturerData.records
     : [];
 
-  const modelCards = useMemo(() => {
+  const modelFamilies = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const grouped = new Map();
 
-    return records
-      .map((record, index) => {
-        const vehicle = record?.vehicle || {};
+    records.forEach((record, index) => {
+      const vehicle = record?.vehicle || {};
+      const familyName = getModelFamily(vehicle);
+      const key = normaliseFamilyKey(familyName);
 
-        return {
-          id:
-            record?.record_id ||
-            [
-              vehicle.make,
-              vehicle.model,
-              vehicle.year_from,
-              vehicle.year_to,
-              vehicle.variant,
-              index,
-            ]
-              .filter(
-                (value) =>
-                  value !== undefined && value !== null && value !== '',
-              )
-              .join('_'),
-          record,
-          modelName:
-            vehicle.model || vehicle.model_name || 'Unknown model',
-          variant: vehicle.variant || vehicle.generation || '',
-          yearText: formatYearRange(record),
-        };
-      })
-      .filter((item) => {
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          id: key || `model_family_${index}`,
+          familyName,
+          records: [],
+          yearFrom: null,
+          yearTo: null,
+        });
+      }
+
+      const family = grouped.get(key);
+      family.records.push(record);
+
+      const yearFrom = toYear(vehicle.year_from);
+      const yearTo = toYear(vehicle.year_to);
+
+      if (yearFrom !== null) {
+        family.yearFrom = family.yearFrom === null
+          ? yearFrom
+          : Math.min(family.yearFrom, yearFrom);
+      }
+
+      if (yearTo !== null) {
+        family.yearTo = family.yearTo === null
+          ? yearTo
+          : Math.max(family.yearTo, yearTo);
+      }
+    });
+
+    return Array.from(grouped.values())
+      .map((family) => ({
+        ...family,
+        yearText: formatFamilyYearRange(family),
+      }))
+      .filter((family) => {
         if (!query) return true;
 
-        return [item.modelName, item.variant, item.yearText]
+        return [family.familyName, family.yearText]
           .join(' ')
           .toLowerCase()
           .includes(query);
       })
-      .sort((first, second) => {
-        const modelComparison = first.modelName.localeCompare(
-          second.modelName,
-        );
-
-        if (modelComparison !== 0) return modelComparison;
-
-        const firstYear = first.record?.vehicle?.year_from ?? 0;
-        const secondYear = second.record?.vehicle?.year_from ?? 0;
-        return secondYear - firstYear;
-      });
+      .sort((first, second) =>
+        first.familyName.localeCompare(second.familyName),
+      );
   }, [records, search]);
 
-  function openVehicle(record) {
-    navigation.navigate('Vehicle', {
-      record: normaliseRecord(record),
+  function openFamily(family) {
+    navigation.navigate('ModelFamily', {
+      manufacturer,
+      familyName: family.familyName,
+      records: family.records,
     });
   }
 
@@ -83,37 +90,29 @@ export default function ModelsScreen({ route, navigation }) {
             manufacturerData?.manufacturer?.name ||
             'Models'}
         </Text>
-        <Text style={styles.subtitle}>Select a model and year range</Text>
+        <Text style={styles.subtitle}>Select a model family</Text>
       </View>
 
       <View style={styles.searchBox}>
-        <Ionicons
-          name="search-outline"
-          size={21}
-          color="#64748B"
-        />
+        <Ionicons name="search-outline" size={21} color="#64748B" />
         <TextInput
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search models or years"
+          placeholder="Search model families"
           placeholderTextColor="#64748B"
           autoCapitalize="none"
           autoCorrect={false}
         />
         {search.length > 0 ? (
           <Pressable onPress={() => setSearch('')} hitSlop={10}>
-            <Ionicons
-              name="close-circle"
-              size={22}
-              color="#64748B"
-            />
+            <Ionicons name="close-circle" size={22} color="#64748B" />
           </Pressable>
         ) : null}
       </View>
 
       <FlatList
-        data={modelCards}
+        data={modelFamilies}
         keyExtractor={(item) => item.id}
         numColumns={2}
         showsVerticalScrollIndicator={false}
@@ -121,12 +120,8 @@ export default function ModelsScreen({ route, navigation }) {
         columnWrapperStyle={styles.columnWrapper}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons
-              name="car-sport-outline"
-              size={52}
-              color="#475569"
-            />
-            <Text style={styles.emptyTitle}>No models found</Text>
+            <Ionicons name="car-sport-outline" size={52} color="#475569" />
+            <Text style={styles.emptyTitle}>No model families found</Text>
             <Text style={styles.emptyText}>
               There are no matching vehicle records for this manufacturer.
             </Text>
@@ -138,30 +133,26 @@ export default function ModelsScreen({ route, navigation }) {
               styles.modelCard,
               pressed && styles.modelCardPressed,
             ]}
-            onPress={() => openVehicle(item.record)}
+            onPress={() => openFamily(item)}
           >
             <View style={styles.vehicleIconContainer}>
               <View style={styles.vehicleIconHighlight} />
-              <Ionicons
-                name="car-sport"
-                size={42}
-                color="#BFDBFE"
-              />
+              <Ionicons name="car-sport" size={42} color="#BFDBFE" />
             </View>
 
             <Text style={styles.modelName} numberOfLines={2}>
-              {item.modelName}
+              {item.familyName}
             </Text>
             <Text style={styles.yearRange} numberOfLines={1}>
               {item.yearText}
             </Text>
-            {item.variant ? (
-              <Text style={styles.variant} numberOfLines={2}>
-                {item.variant}
-              </Text>
-            ) : null}
-            <View style={styles.marketPill}>
-              <Text style={styles.marketPillText}>UK · RHD</Text>
+            <Text style={styles.generationCount} numberOfLines={1}>
+              {item.records.length} {item.records.length === 1 ? 'generation' : 'generations'}
+            </Text>
+
+            <View style={styles.openPill}>
+              <Text style={styles.openPillText}>Open</Text>
+              <Ionicons name="chevron-forward" size={15} color="#93C5FD" />
             </View>
           </Pressable>
         )}
@@ -170,85 +161,72 @@ export default function ModelsScreen({ route, navigation }) {
   );
 }
 
-function normaliseRecord(record = {}) {
-  const vehicleInformation = record.vehicle_information || {};
-  const keyInformation = record.key_information || {
-    key_type: vehicleInformation.key_type,
-    blade_profile: vehicleInformation.blade_profile,
-    emergency_blade:
-      vehicleInformation.emergency_blade ||
-      vehicleInformation.blade_profile,
-    transponder_type: vehicleInformation.transponder_type,
-    frequency_mhz: vehicleInformation.frequency_mhz,
-    battery: vehicleInformation.battery,
-    buttons: vehicleInformation.buttons,
-  };
+function getModelFamily(vehicle = {}) {
+  const explicitFamily =
+    vehicle.model_family ||
+    vehicle.family ||
+    vehicle.base_model;
 
-  const security = record.security || {
-    family:
-      vehicleInformation.immobiliser_system ||
-      vehicleInformation.security_system,
-    platform:
-      record.vehicle?.platform || vehicleInformation.platform,
-    programming_module:
-      vehicleInformation.programming_module,
-    programming_route:
-      vehicleInformation.programming_route,
-    security_access:
-      vehicleInformation.immobiliser_generation,
-    online_requirement:
-      vehicleInformation.online_requirement,
-    fdrs_requirement:
-      vehicleInformation.fdrs_requirement,
-    gateway_requirement:
-      vehicleInformation.gateway_requirement,
-  };
+  if (hasText(explicitFamily)) return String(explicitFamily).trim();
 
-  return {
-    ...record,
-    key_information: keyInformation,
-    security,
-    operations: record.operations || record.procedures || {},
-    tools: record.tools || {},
-    modules: record.modules || {},
-    notes:
-      record.notes ||
-      (vehicleInformation.notes
-        ? { general: vehicleInformation.notes }
-        : {}),
-  };
+  const modelName = String(
+    vehicle.model || vehicle.model_name || 'Unknown model',
+  ).trim();
+  const generation = String(
+    vehicle.generation || vehicle.variant || '',
+  ).trim();
+
+  if (generation) {
+    const escapedGeneration = escapeRegExp(generation);
+    const withoutGeneration = modelName
+      .replace(new RegExp(`\\s*[-–—(]*${escapedGeneration}[)]*\\s*$`, 'i'), '')
+      .trim();
+
+    if (withoutGeneration) return withoutGeneration;
+  }
+
+  return modelName;
 }
 
-function formatYearRange(record) {
-  const yearFrom = record?.vehicle?.year_from;
-  const yearTo = record?.vehicle?.year_to;
+function normaliseFamilyKey(value) {
+  return String(value || 'unknown-model')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
 
-  if (yearFrom && yearTo) return `${yearFrom}–${yearTo}`;
-  if (yearFrom && !yearTo) return `${yearFrom} onwards`;
-  if (!yearFrom && yearTo) return `Up to ${yearTo}`;
+function formatFamilyYearRange(family) {
+  if (family.yearFrom && family.yearTo) {
+    return `${family.yearFrom}–${family.yearTo}`;
+  }
+  if (family.yearFrom && !family.yearTo) return `${family.yearFrom} onwards`;
+  if (!family.yearFrom && family.yearTo) return `Up to ${family.yearTo}`;
   return 'Year range unknown';
 }
 
+function toYear(value) {
+  const year = Number.parseInt(value, 10);
+  return Number.isFinite(year) && year > 1900 ? year : null;
+}
+
+function hasText(value) {
+  return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#0B1220',
-  },
+  safeArea: { flex: 1, backgroundColor: '#0B1220' },
   header: {
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 12,
   },
-  title: {
-    color: '#F8FAFC',
-    fontSize: 25,
-    fontWeight: '900',
-  },
-  subtitle: {
-    color: '#94A3B8',
-    fontSize: 15,
-    marginTop: 4,
-  },
+  title: { color: '#F8FAFC', fontSize: 25, fontWeight: '900' },
+  subtitle: { color: '#94A3B8', fontSize: 15, marginTop: 4 },
   searchBox: {
     minHeight: 52,
     marginHorizontal: 18,
@@ -268,17 +246,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 12,
   },
-  listContent: {
-    paddingHorizontal: 12,
-    paddingBottom: 34,
-  },
-  columnWrapper: {
-    gap: 10,
-    alignItems: 'stretch',
-  },
+  listContent: { paddingHorizontal: 12, paddingBottom: 34 },
+  columnWrapper: { gap: 10, alignItems: 'stretch' },
   modelCard: {
     flex: 1,
-    minHeight: 245,
+    minHeight: 222,
     marginVertical: 5,
     paddingHorizontal: 12,
     paddingTop: 14,
@@ -294,10 +266,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  modelCardPressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.98 }],
-  },
+  modelCardPressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
   vehicleIconContainer: {
     width: 82,
     height: 62,
@@ -320,10 +289,10 @@ const styles = StyleSheet.create({
   },
   modelName: {
     width: '100%',
-    minHeight: 48,
+    minHeight: 44,
     color: '#F8FAFC',
-    fontSize: 17,
-    lineHeight: 21,
+    fontSize: 18,
+    lineHeight: 22,
     fontWeight: '900',
     textAlign: 'center',
     marginTop: 10,
@@ -335,31 +304,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 3,
   },
-  variant: {
-    width: '100%',
-    minHeight: 34,
+  generationCount: {
     color: '#94A3B8',
-    fontSize: 11.5,
-    lineHeight: 16,
+    fontSize: 12,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 5,
   },
-  marketPill: {
-    minHeight: 25,
+  openPill: {
+    minHeight: 27,
     marginTop: 'auto',
-    paddingHorizontal: 10,
-    borderRadius: 13,
-    backgroundColor: '#1E293B',
+    paddingHorizontal: 11,
+    borderRadius: 14,
+    backgroundColor: '#172554',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#1D4ED8',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 2,
   },
-  marketPillText: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '800',
-  },
+  openPillText: { color: '#BFDBFE', fontSize: 11, fontWeight: '900' },
   emptyState: {
     paddingTop: 72,
     paddingHorizontal: 34,
