@@ -10,87 +10,66 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function ModelsScreen({ route, navigation }) {
-  const { manufacturer, manufacturerData } = route.params || {};
+export default function ModelFamilyScreen({ route, navigation }) {
+  const { familyName, records = [] } = route.params || {};
   const [search, setSearch] = useState('');
 
-  const records = Array.isArray(manufacturerData?.records)
-    ? manufacturerData.records
-    : [];
-
-  const modelFamilies = useMemo(() => {
+  const modelCards = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const grouped = new Map();
 
-    records.forEach((record, index) => {
-      const vehicle = record?.vehicle || {};
-      const familyName = getModelFamily(vehicle);
-      const key = normaliseFamilyKey(familyName);
+    return (Array.isArray(records) ? records : [])
+      .map((record, index) => {
+        const vehicle = record?.vehicle || {};
 
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          id: key || `model_family_${index}`,
-          familyName,
-          records: [],
-          yearFrom: null,
-          yearTo: null,
-        });
-      }
-
-      const family = grouped.get(key);
-      family.records.push(record);
-
-      const yearFrom = toYear(vehicle.year_from);
-      const yearTo = toYear(vehicle.year_to);
-
-      if (yearFrom !== null) {
-        family.yearFrom = family.yearFrom === null
-          ? yearFrom
-          : Math.min(family.yearFrom, yearFrom);
-      }
-
-      if (yearTo !== null) {
-        family.yearTo = family.yearTo === null
-          ? yearTo
-          : Math.max(family.yearTo, yearTo);
-      }
-    });
-
-    return Array.from(grouped.values())
-      .map((family) => ({
-        ...family,
-        yearText: formatFamilyYearRange(family),
-      }))
-      .filter((family) => {
+        return {
+          id:
+            record?.record_id ||
+            [
+              vehicle.make,
+              vehicle.model,
+              vehicle.year_from,
+              vehicle.year_to,
+              vehicle.variant,
+              vehicle.generation,
+              index,
+            ]
+              .filter(
+                (value) =>
+                  value !== undefined && value !== null && value !== '',
+              )
+              .join('_'),
+          record,
+          modelName: vehicle.model || vehicle.model_name || familyName || 'Unknown model',
+          variant: vehicle.variant || vehicle.generation || '',
+          yearText: formatYearRange(record),
+        };
+      })
+      .filter((item) => {
         if (!query) return true;
 
-        return [family.familyName, family.yearText]
+        return [item.modelName, item.variant, item.yearText]
           .join(' ')
           .toLowerCase()
           .includes(query);
       })
-      .sort((first, second) =>
-        first.familyName.localeCompare(second.familyName),
-      );
-  }, [records, search]);
+      .sort((first, second) => {
+        const firstYear = first.record?.vehicle?.year_from ?? 0;
+        const secondYear = second.record?.vehicle?.year_from ?? 0;
+        return secondYear - firstYear;
+      });
+  }, [records, search, familyName]);
 
-  function openFamily(family) {
-    navigation.navigate('ModelFamily', {
-      manufacturer,
-      familyName: family.familyName,
-      records: family.records,
+  function openVehicle(record) {
+    navigation.navigate('Vehicle', {
+      record: normaliseRecord(record),
     });
   }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <Text style={styles.title}>
-          {manufacturer?.name ||
-            manufacturerData?.manufacturer?.name ||
-            'Models'}
-        </Text>
-        <Text style={styles.subtitle}>Select a model family</Text>
+        <Text style={styles.title}>{familyName || 'Model family'}</Text>
+        <Text style={styles.subtitle}>Select a generation and year range</Text>
       </View>
 
       <View style={styles.searchBox}>
@@ -99,7 +78,7 @@ export default function ModelsScreen({ route, navigation }) {
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search model families"
+          placeholder="Search generations or years"
           placeholderTextColor="#64748B"
           autoCapitalize="none"
           autoCorrect={false}
@@ -112,7 +91,7 @@ export default function ModelsScreen({ route, navigation }) {
       </View>
 
       <FlatList
-        data={modelFamilies}
+        data={modelCards}
         keyExtractor={(item) => item.id}
         numColumns={2}
         showsVerticalScrollIndicator={false}
@@ -121,9 +100,9 @@ export default function ModelsScreen({ route, navigation }) {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="car-sport-outline" size={52} color="#475569" />
-            <Text style={styles.emptyTitle}>No model families found</Text>
+            <Text style={styles.emptyTitle}>No generations found</Text>
             <Text style={styles.emptyText}>
-              There are no matching vehicle records for this manufacturer.
+              There are no matching records in this model family.
             </Text>
           </View>
         }
@@ -133,7 +112,7 @@ export default function ModelsScreen({ route, navigation }) {
               styles.modelCard,
               pressed && styles.modelCardPressed,
             ]}
-            onPress={() => openFamily(item)}
+            onPress={() => openVehicle(item.record)}
           >
             <View style={styles.vehicleIconContainer}>
               <View style={styles.vehicleIconHighlight} />
@@ -141,18 +120,18 @@ export default function ModelsScreen({ route, navigation }) {
             </View>
 
             <Text style={styles.modelName} numberOfLines={2}>
-              {item.familyName}
+              {item.variant || item.modelName}
             </Text>
             <Text style={styles.yearRange} numberOfLines={1}>
               {item.yearText}
             </Text>
-            <Text style={styles.generationCount} numberOfLines={1}>
-              {item.records.length} {item.records.length === 1 ? 'generation' : 'generations'}
-            </Text>
-
-            <View style={styles.openPill}>
-              <Text style={styles.openPillText}>Open</Text>
-              <Ionicons name="chevron-forward" size={15} color="#93C5FD" />
+            {item.variant && item.modelName !== familyName ? (
+              <Text style={styles.variant} numberOfLines={2}>
+                {item.modelName}
+              </Text>
+            ) : null}
+            <View style={styles.marketPill}>
+              <Text style={styles.marketPillText}>UK · RHD</Text>
             </View>
           </Pressable>
         )}
@@ -161,61 +140,56 @@ export default function ModelsScreen({ route, navigation }) {
   );
 }
 
-function getModelFamily(vehicle = {}) {
-  const explicitFamily =
-    vehicle.model_family ||
-    vehicle.family ||
-    vehicle.base_model;
+function normaliseRecord(record = {}) {
+  const vehicleInformation = record.vehicle_information || {};
+  const keyInformation = record.key_information || {
+    key_type: vehicleInformation.key_type,
+    blade_profile: vehicleInformation.blade_profile,
+    emergency_blade:
+      vehicleInformation.emergency_blade ||
+      vehicleInformation.blade_profile,
+    transponder_type: vehicleInformation.transponder_type,
+    frequency_mhz: vehicleInformation.frequency_mhz,
+    battery: vehicleInformation.battery,
+    buttons: vehicleInformation.buttons,
+  };
 
-  if (hasText(explicitFamily)) return String(explicitFamily).trim();
+  const security = record.security || {
+    family:
+      vehicleInformation.immobiliser_system ||
+      vehicleInformation.security_system,
+    platform: record.vehicle?.platform || vehicleInformation.platform,
+    programming_module: vehicleInformation.programming_module,
+    programming_route: vehicleInformation.programming_route,
+    security_access: vehicleInformation.immobiliser_generation,
+    online_requirement: vehicleInformation.online_requirement,
+    fdrs_requirement: vehicleInformation.fdrs_requirement,
+    gateway_requirement: vehicleInformation.gateway_requirement,
+  };
 
-  const modelName = String(
-    vehicle.model || vehicle.model_name || 'Unknown model',
-  ).trim();
-  const generation = String(
-    vehicle.generation || vehicle.variant || '',
-  ).trim();
-
-  if (generation) {
-    const escapedGeneration = escapeRegExp(generation);
-    const withoutGeneration = modelName
-      .replace(new RegExp(`\\s*[-–—(]*${escapedGeneration}[)]*\\s*$`, 'i'), '')
-      .trim();
-
-    if (withoutGeneration) return withoutGeneration;
-  }
-
-  return modelName;
+  return {
+    ...record,
+    key_information: keyInformation,
+    security,
+    operations: record.operations || record.procedures || {},
+    tools: record.tools || {},
+    modules: record.modules || {},
+    notes:
+      record.notes ||
+      (vehicleInformation.notes
+        ? { general: vehicleInformation.notes }
+        : {}),
+  };
 }
 
-function normaliseFamilyKey(value) {
-  return String(value || 'unknown-model')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
+function formatYearRange(record) {
+  const yearFrom = record?.vehicle?.year_from;
+  const yearTo = record?.vehicle?.year_to;
 
-function formatFamilyYearRange(family) {
-  if (family.yearFrom && family.yearTo) {
-    return `${family.yearFrom}–${family.yearTo}`;
-  }
-  if (family.yearFrom && !family.yearTo) return `${family.yearFrom} onwards`;
-  if (!family.yearFrom && family.yearTo) return `Up to ${family.yearTo}`;
+  if (yearFrom && yearTo) return `${yearFrom}–${yearTo}`;
+  if (yearFrom && !yearTo) return `${yearFrom} onwards`;
+  if (!yearFrom && yearTo) return `Up to ${yearTo}`;
   return 'Year range unknown';
-}
-
-function toYear(value) {
-  const year = Number.parseInt(value, 10);
-  return Number.isFinite(year) && year > 1900 ? year : null;
-}
-
-function hasText(value) {
-  return value !== undefined && value !== null && String(value).trim() !== '';
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 const styles = StyleSheet.create({
@@ -250,7 +224,7 @@ const styles = StyleSheet.create({
   columnWrapper: { gap: 10, alignItems: 'stretch' },
   modelCard: {
     flex: 1,
-    minHeight: 222,
+    minHeight: 230,
     marginVertical: 5,
     paddingHorizontal: 12,
     paddingTop: 14,
@@ -289,10 +263,10 @@ const styles = StyleSheet.create({
   },
   modelName: {
     width: '100%',
-    minHeight: 44,
+    minHeight: 48,
     color: '#F8FAFC',
-    fontSize: 18,
-    lineHeight: 22,
+    fontSize: 17,
+    lineHeight: 21,
     fontWeight: '900',
     textAlign: 'center',
     marginTop: 10,
@@ -304,26 +278,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 3,
   },
-  generationCount: {
+  variant: {
+    width: '100%',
+    minHeight: 30,
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 11.5,
+    lineHeight: 16,
     textAlign: 'center',
-    marginTop: 5,
+    marginTop: 4,
   },
-  openPill: {
-    minHeight: 27,
+  marketPill: {
+    minHeight: 25,
     marginTop: 'auto',
-    paddingHorizontal: 11,
-    borderRadius: 14,
-    backgroundColor: '#172554',
+    paddingHorizontal: 10,
+    borderRadius: 13,
+    backgroundColor: '#1E293B',
     borderWidth: 1,
-    borderColor: '#1D4ED8',
-    flexDirection: 'row',
+    borderColor: '#334155',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
   },
-  openPillText: { color: '#BFDBFE', fontSize: 11, fontWeight: '900' },
+  marketPillText: { color: '#94A3B8', fontSize: 11, fontWeight: '800' },
   emptyState: {
     paddingTop: 72,
     paddingHorizontal: 34,
