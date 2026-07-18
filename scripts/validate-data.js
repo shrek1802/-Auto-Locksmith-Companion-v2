@@ -6,6 +6,9 @@ const vehiclesDir = path.join(root, 'data', 'vehicles');
 const masterDir = path.join(root, 'data', 'master');
 const configFile = path.join(root, 'config', 'databaseConfig.js');
 const serviceFile = path.join(root, 'services', 'DatabaseService.js');
+const vehicleScreenFile = path.join(root, 'screens', 'VehicleScreen.js');
+const quickJobFile = path.join(root, 'components', 'QuickJobCard.js');
+const adapterFile = path.join(root, 'services', 'vehicleDisplayAdapter.js');
 
 let failed = false;
 let warnings = 0;
@@ -107,6 +110,51 @@ if (!fs.existsSync(serviceFile)) {
     pass('DatabaseService uses the remote manifest');
   } else {
     fail('DatabaseService does not use REMOTE_MANIFEST_URL');
+  }
+}
+
+const structuredFields = [
+  'blade_profile',
+  'transponder_id',
+  'technology_family',
+  'chip_type',
+  'chip_ic',
+  'remote_configuration',
+  'frequency',
+];
+
+for (const file of [vehicleScreenFile, quickJobFile, adapterFile]) {
+  if (!fs.existsSync(file)) {
+    fail(`${path.relative(root, file)} is missing`);
+    continue;
+  }
+  const source = read(file);
+  const missing = structuredFields.filter((field) => !source.includes(field));
+  if (missing.length) {
+    fail(`${path.relative(root, file)} lacks structured key fields: ${missing.join(', ')}`);
+  } else {
+    pass(`${path.relative(root, file)} supports structured key fields`);
+  }
+}
+
+if (fs.existsSync(quickJobFile)) {
+  const quickJob = read(quickJobFile);
+  if (/function\s+formatTransponder|NXP PCF7946 \/ HITAG2 ID46/.test(quickJob)) {
+    fail('QuickJobCard still infers an exact IC from a transponder family');
+  } else {
+    pass('QuickJobCard does not infer exact ICs from transponder families');
+  }
+}
+
+if (fs.existsSync(vehicleScreenFile)) {
+  const vehicleScreen = read(vehicleScreenFile);
+  const labels = ['Blade', 'Transponder', 'Technology', 'Chip Type', 'Chip IC', 'Remote', 'Frequency'];
+  const positions = labels.map((label) => vehicleScreen.indexOf(`label="${label}"`));
+  const ordered = positions.every((position, index) => position >= 0 && (index === 0 || position > positions[index - 1]));
+  if (ordered) {
+    pass('VehicleScreen renders the structured key profile in locksmith order');
+  } else {
+    fail('VehicleScreen structured key profile order is incorrect');
   }
 }
 

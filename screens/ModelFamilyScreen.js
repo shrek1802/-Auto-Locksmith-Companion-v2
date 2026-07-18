@@ -149,6 +149,16 @@ function normaliseRecord(record = {}) {
       vehicleInformation.emergency_blade ||
       vehicleInformation.blade_profile,
     transponder_type: vehicleInformation.transponder_type,
+    transponder_id: vehicleInformation.transponder_id,
+    technology_family:
+      vehicleInformation.technology_family ||
+      vehicleInformation.transponder_type,
+    chip_type: vehicleInformation.chip_type,
+    chip_ic:
+      vehicleInformation.chip_ic || vehicleInformation.chip_or_ic,
+    remote_configuration: vehicleInformation.remote_configuration,
+    frequency:
+      vehicleInformation.frequency || vehicleInformation.frequency_mhz,
     frequency_mhz: vehicleInformation.frequency_mhz,
     battery: vehicleInformation.battery,
     buttons: vehicleInformation.buttons,
