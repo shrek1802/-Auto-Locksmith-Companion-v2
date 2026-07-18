@@ -27,6 +27,13 @@ const STATUS_CONFIG = {
     textColor: '#FED7AA',
   },
 
+  verification_required: {
+    label: 'Verify first',
+    backgroundColor: '#3B2F10',
+    borderColor: '#854D0E',
+    textColor: '#FDE68A',
+  },
+
   not_supported: {
     label: 'Not supported',
     backgroundColor: '#450A0A',
