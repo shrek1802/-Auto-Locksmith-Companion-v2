@@ -239,7 +239,13 @@ function normaliseOperation(record, operationId, ownedTools, showOnlyOwnedTools)
   const online = preferred(object.online_requirement, vehicleProgramming.online_requirement);
   const tools = operationToolMap(record, object, ownedTools, showOnlyOwnedTools);
   const explicitStatus = String(object.overall_status || object.status || '').toLowerCase();
-  const validStatus = ['supported', 'partially_supported', 'conditional', 'not_supported'].includes(explicitStatus);
+  const validStatus = [
+    'supported',
+    'partially_supported',
+    'conditional',
+    'verification_required',
+    'not_supported',
+  ].includes(explicitStatus);
   const meaningfulMethod = hasValue(methodText);
   return {
     ...cleanValue(object),
