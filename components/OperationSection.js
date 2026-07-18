@@ -17,11 +17,13 @@ export default function OperationSection({
 }) {
   const tools = operation?.tools || {};
   const toolEntries = Object.entries(tools);
-
   const overallStatus =
     operation?.overall_status ||
     operation?.status ||
     deriveOverallStatus(toolEntries);
+
+  const summary = displayOperationText(operation?.summary);
+  const method = displayOperationText(operation?.method_text);
 
   return (
     <View style={styles.card}>
@@ -29,9 +31,9 @@ export default function OperationSection({
         <View style={styles.headerText}>
           <Text style={styles.title}>{title}</Text>
 
-          {operation?.summary ? (
+          {summary ? (
             <Text style={styles.summary} numberOfLines={2}>
-              {operation.summary}
+              {summary}
             </Text>
           ) : null}
         </View>
@@ -65,16 +67,20 @@ export default function OperationSection({
             />
           ) : null}
 
-          {operation?.method_text ? (
-            <InfoRow label="Method" value={operation.method_text} />
-          ) : null}
+          {method ? <InfoRow label="Method" value={method} /> : null}
 
           {operation?.programming_method ? (
-            <InfoRow label="Programming route" value={operation.programming_method} />
+            <InfoRow
+              label="Programming Method"
+              value={operation.programming_method}
+            />
           ) : null}
 
           {operation?.online_requirement ? (
-            <InfoRow label="Online / FDRS" value={operation.online_requirement} />
+            <InfoRow
+              label="Online / Server Access"
+              value={operation.online_requirement}
+            />
           ) : null}
 
           {operation?.estimated_minutes ? (
@@ -87,7 +93,6 @@ export default function OperationSection({
           {operation?.warnings?.length ? (
             <View style={styles.warningBox}>
               <Text style={styles.warningTitle}>Warnings</Text>
-
               {operation.warnings.map((warning, index) => (
                 <View key={`warning-${index}`} style={styles.warningRow}>
                   <Text style={styles.warningBullet}>•</Text>
@@ -101,16 +106,12 @@ export default function OperationSection({
 
           {toolEntries.length ? (
             toolEntries.map(([toolId, tool]) => (
-              <ToolCard
-                key={toolId}
-                toolId={toolId}
-                tool={tool}
-              />
+              <ToolCard key={toolId} toolId={toolId} tool={tool} />
             ))
           ) : (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyText}>
-                No tool information has been added for this operation.
+                No verified tool information has been added for this operation.
               </Text>
             </View>
           )}
@@ -121,9 +122,7 @@ export default function OperationSection({
 }
 
 function InfoRow({ label, value }) {
-  if (!value) {
-    return null;
-  }
+  if (!value) return null;
 
   return (
     <View style={styles.infoRow}>
@@ -133,22 +132,22 @@ function InfoRow({ label, value }) {
   );
 }
 
+function displayOperationText(value) {
+  if (!value) return '';
+  const text = String(value).trim();
+  return /^PROC_[A-Z0-9_]+$/i.test(text) ? '' : text;
+}
+
 function deriveOverallStatus(toolEntries) {
-  if (!toolEntries.length) {
-    return 'unknown';
-  }
+  if (!toolEntries.length) return 'unknown';
 
   const statuses = toolEntries.map(([, tool]) => tool?.status);
-
-  if (statuses.some((status) => status === 'supported')) {
-    return 'supported';
-  }
+  if (statuses.some((status) => status === 'supported')) return 'supported';
 
   if (
     statuses.some(
       (status) =>
-        status === 'partially_supported' ||
-        status === 'conditional'
+        status === 'partially_supported' || status === 'conditional',
     )
   ) {
     return 'partially_supported';
@@ -162,30 +161,16 @@ function deriveOverallStatus(toolEntries) {
 }
 
 function formatEstimatedTime(value) {
-  if (typeof value === 'number') {
-    return `${value} minutes`;
-  }
+  if (typeof value === 'number') return `${value} minutes`;
 
   const minimum = value?.minimum;
   const typical = value?.typical;
   const maximum = value?.maximum;
 
-  if (minimum && maximum) {
-    return `${minimum}–${maximum} minutes`;
-  }
-
-  if (typical) {
-    return `${typical} minutes`;
-  }
-
-  if (minimum) {
-    return `From ${minimum} minutes`;
-  }
-
-  if (maximum) {
-    return `Up to ${maximum} minutes`;
-  }
-
+  if (minimum && maximum) return `${minimum}–${maximum} minutes`;
+  if (typical) return `${typical} minutes`;
+  if (minimum) return `From ${minimum} minutes`;
+  if (maximum) return `Up to ${maximum} minutes`;
   return '';
 }
 
@@ -206,34 +191,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerText: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  title: {
-    color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  summary: {
-    color: '#94A3B8',
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  chevron: {
-    color: '#60A5FA',
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  content: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
+  headerText: { flex: 1, paddingRight: 12 },
+  title: { color: '#F8FAFC', fontSize: 18, fontWeight: '900' },
+  summary: { color: '#94A3B8', marginTop: 4, lineHeight: 18 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  chevron: { color: '#60A5FA', fontSize: 22, fontWeight: '900' },
+  content: { paddingHorizontal: 16, paddingBottom: 16 },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -242,10 +205,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#253047',
   },
-  infoLabel: {
-    color: '#94A3B8',
-    flex: 1,
-  },
+  infoLabel: { color: '#94A3B8', flex: 1 },
   infoValue: {
     color: '#F8FAFC',
     flex: 1,
@@ -260,26 +220,10 @@ const styles = StyleSheet.create({
     borderColor: '#854D0E',
     padding: 12,
   },
-  warningTitle: {
-    color: '#FDE68A',
-    fontWeight: '900',
-    marginBottom: 6,
-  },
-  warningRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: 4,
-  },
-  warningBullet: {
-    color: '#FBBF24',
-    marginRight: 8,
-    lineHeight: 20,
-  },
-  warningText: {
-    color: '#FEF3C7',
-    flex: 1,
-    lineHeight: 20,
-  },
+  warningTitle: { color: '#FDE68A', fontWeight: '900', marginBottom: 6 },
+  warningRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 },
+  warningBullet: { color: '#FBBF24', marginRight: 8, lineHeight: 20 },
+  warningText: { color: '#FEF3C7', flex: 1, lineHeight: 20 },
   toolsTitle: {
     color: '#F8FAFC',
     fontSize: 16,
@@ -287,13 +231,6 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 10,
   },
-  emptyBox: {
-    borderRadius: 12,
-    backgroundColor: '#0F172A',
-    padding: 14,
-  },
-  emptyText: {
-    color: '#94A3B8',
-    lineHeight: 20,
-  },
+  emptyBox: { borderRadius: 12, backgroundColor: '#0F172A', padding: 14 },
+  emptyText: { color: '#94A3B8', lineHeight: 20 },
 });
