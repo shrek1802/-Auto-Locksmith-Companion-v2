@@ -66,6 +66,7 @@ function fullFixture() {
 }
 
 async function run() {
+  assert(require.resolve('simple-icons'), 'Bundled manufacturer logo catalogue must resolve');
   const { manifest, payload } = fullFixture();
   assert.strictEqual(validatePackageMetadata(manifest), true);
   assert.deepStrictEqual(validateDatabasePackage(payload, manifest), manifest.package_counts);

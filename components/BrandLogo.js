@@ -15,7 +15,7 @@ import {
   siPeugeot, siPolestar, siPorsche, siRenault, siRollsroyce,
   siSeat, siSkoda, siSmart, siSubaru, siSuzuki, siTesla,
   siToyota, siVauxhall, siVolkswagen, siVolvo,
-} from 'simple-icons/icons';
+} from 'simple-icons';
 
 const { selectLogoSource } = require('../services/brandLogoCore');
 
