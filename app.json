@@ -2,7 +2,7 @@
   "expo": {
     "name": "Locksmith Companion Pro",
     "slug": "locksmith-companion-pro",
-    "version": "2.0.6",
+    "version": "2.0.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.locksmithkeydb.app",
-      "versionCode": 60,
+      "versionCode": 61,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B1220"
@@ -21,7 +21,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.locksmithkeydb.app",
-      "buildNumber": "60",
+      "buildNumber": "61",
       "supportsTablet": true
     },
     "extra": {

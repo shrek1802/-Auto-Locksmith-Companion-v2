@@ -1,17 +1,37 @@
 import * as FileSystem from 'expo-file-system';
+import * as Crypto from 'expo-crypto';
 
 import {
   DATABASE_FOLDER_NAME,
   LOCAL_MANIFEST_NAME,
+  PACKAGE_DOWNLOAD_RETRIES,
+  PACKAGE_DOWNLOAD_TIMEOUT_MS,
   REMOTE_MANIFEST_URL,
   REQUEST_TIMEOUT_MS,
 } from '../config/databaseConfig';
+
+const {
+  formatDownloadProgress,
+  packageUpdateAvailable,
+  performAtomicInstall,
+  validateDatabasePackage,
+  validatePackageMetadata,
+} = require('./databasePackageCore');
 
 const DATABASE_ROOT =
   `${FileSystem.documentDirectory}${DATABASE_FOLDER_NAME}/`;
 
 const LOCAL_ROOT_MANIFEST_PATH =
   `${DATABASE_ROOT}${LOCAL_MANIFEST_NAME}`;
+
+const LOCAL_PACKAGE_PATH =
+  `${DATABASE_ROOT}database-package.json`;
+
+const INSTALL_ROOT =
+  `${FileSystem.documentDirectory}${DATABASE_FOLDER_NAME}_install/`;
+
+const BACKUP_ROOT =
+  `${FileSystem.documentDirectory}${DATABASE_FOLDER_NAME}_backup/`;
 
 const EMPTY_ROOT_MANIFEST = {
   schema_version: '2.1',
@@ -54,6 +74,12 @@ export async function loadDatabase() {
 
   const byManufacturer = {};
 
+  if (await fileExists(LOCAL_PACKAGE_PATH)) {
+    const packagePayload = await readJson(LOCAL_PACKAGE_PATH);
+    validateDatabasePackage(packagePayload, rootManifest);
+    return loadPackagedDatabase(rootManifest, packagePayload);
+  }
+
   for (const [
     manufacturerId,
     manufacturerEntry,
@@ -94,11 +120,20 @@ export async function checkForDatabaseUpdates() {
     );
 
   validateRootManifest(remoteRootManifest);
+  validatePackageMetadata(remoteRootManifest);
 
   const localRootManifest =
     await loadLocalRootManifest();
 
   const changed = [];
+
+  if (!packageUpdateAvailable(remoteRootManifest, localRootManifest)) {
+    return {
+      remote: remoteRootManifest,
+      local: localRootManifest,
+      changed,
+    };
+  }
 
   for (const [
     manufacturerId,
@@ -149,9 +184,10 @@ export async function checkForDatabaseUpdates() {
 export async function downloadDatabaseUpdates(
   remoteRootManifest,
   changedEntries,
+  onProgress = () => {},
 ) {
-  await ensureDirectory(DATABASE_ROOT);
   validateRootManifest(remoteRootManifest);
+  validatePackageMetadata(remoteRootManifest);
 
   if (!Array.isArray(changedEntries)) {
     throw new Error(
@@ -159,61 +195,61 @@ export async function downloadDatabaseUpdates(
     );
   }
 
-  const localRootManifest =
-    await loadLocalRootManifest();
+  await deleteIfExists(INSTALL_ROOT);
+  await ensureDirectory(INSTALL_ROOT);
+  const temporaryPackagePath = `${INSTALL_ROOT}database-package.json`;
+  const packageUrl = resolveUrl(REMOTE_MANIFEST_URL, remoteRootManifest.package_url);
 
-  const nextRootManifest = {
-    ...remoteRootManifest,
-    database_source: 'remote_only',
-    manufacturers: {
-      ...(localRootManifest.manufacturers ||
-        {}),
-    },
-  };
+  try {
+    onProgress({ stage: 'Downloading database', ...formatDownloadProgress(0, remoteRootManifest.package_size) });
+    await downloadPackageWithRetries(packageUrl, temporaryPackagePath, remoteRootManifest, onProgress);
 
-  const updatedManufacturerNames = [];
-
-  for (const [
-    manufacturerId,
-    remoteManufacturerEntry,
-  ] of changedEntries) {
-    const result = await updateManufacturer(
-      manufacturerId,
-      remoteManufacturerEntry,
+    onProgress({ stage: 'Verifying download' });
+    const packageInfo = await FileSystem.getInfoAsync(temporaryPackagePath);
+    if (!packageInfo.exists || Number(packageInfo.size) !== Number(remoteRootManifest.package_size)) {
+      throw new Error('The downloaded database package size is incorrect.');
+    }
+    const packageText = await FileSystem.readAsStringAsync(temporaryPackagePath, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+    const actualSha256 = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      packageText,
     );
+    if (actualSha256.toLowerCase() !== String(remoteRootManifest.package_sha256).toLowerCase()) {
+      throw new Error('The downloaded database checksum is invalid.');
+    }
 
-    nextRootManifest.manufacturers[
-      manufacturerId
-    ] = {
-      ...remoteManufacturerEntry,
-      bundled: false,
-      name:
-        remoteManufacturerEntry.name ||
-        result.manufacturerName ||
-        formatName(manufacturerId),
-      local_manifest:
-        `${manufacturerId}/manifest.json`,
+    onProgress({ stage: 'Validating database' });
+    let packagePayload;
+    try {
+      packagePayload = JSON.parse(packageText);
+    } catch {
+      throw new Error('The downloaded database package is not valid JSON.');
+    }
+    validateDatabasePackage(packagePayload, remoteRootManifest);
+
+    onProgress({ stage: 'Installing database' });
+    await writeJsonAtomically(
+      `${INSTALL_ROOT}${LOCAL_MANIFEST_NAME}`,
+      { ...remoteRootManifest, database_source: 'packaged_remote' },
+    );
+    await installPreparedDatabase();
+    onProgress({ stage: 'Update complete', percentage: 100 });
+
+    return {
+      updatedBrands: Object.values(remoteRootManifest.manufacturers || {})
+        .map((entry) => entry.name)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+      summary: packagePayload.counts,
+      databaseVersion: remoteRootManifest.database_version,
+      packageSize: remoteRootManifest.package_size,
     };
-
-    updatedManufacturerNames.push(
-      remoteManufacturerEntry.name ||
-        result.manufacturerName ||
-        formatName(manufacturerId),
-    );
+  } catch (error) {
+    await deleteIfExists(INSTALL_ROOT);
+    throw error;
   }
-
-  nextRootManifest.updated_at =
-    remoteRootManifest.updated_at ||
-    new Date().toISOString();
-
-  await writeJsonAtomically(
-    LOCAL_ROOT_MANIFEST_PATH,
-    nextRootManifest,
-  );
-
-  return [
-    ...new Set(updatedManufacturerNames),
-  ].sort((a, b) => a.localeCompare(b));
 }
 
 /*
@@ -222,6 +258,8 @@ export async function downloadDatabaseUpdates(
  * restores an empty remote-only database rather than a bundled Ford record.
  */
 export async function resetToBundledDatabase() {
+  await deleteIfExists(INSTALL_ROOT);
+  await deleteIfExists(BACKUP_ROOT);
   if (await fileExists(DATABASE_ROOT)) {
     await FileSystem.deleteAsync(
       DATABASE_ROOT,
@@ -233,6 +271,129 @@ export async function resetToBundledDatabase() {
 
   await installEmptyDatabase();
   return loadDatabase();
+}
+
+async function downloadPackageWithRetries(
+  url,
+  destination,
+  manifest,
+  onProgress,
+) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= PACKAGE_DOWNLOAD_RETRIES; attempt += 1) {
+    await deleteIfExists(destination);
+    const resumable = FileSystem.createDownloadResumable(
+      `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`,
+      destination,
+      { headers: { 'Cache-Control': 'no-cache, no-store' } },
+      ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
+        onProgress({
+          stage: 'Downloading database',
+          attempt,
+          ...formatDownloadProgress(
+            totalBytesWritten,
+            totalBytesExpectedToWrite > 0
+              ? totalBytesExpectedToWrite
+              : manifest.package_size,
+          ),
+        });
+      },
+    );
+
+    let timer;
+    try {
+      const result = await Promise.race([
+        resumable.downloadAsync(),
+        new Promise((_, reject) => {
+          timer = setTimeout(async () => {
+            try { await resumable.pauseAsync(); } catch {}
+            reject(new Error('The database package download timed out.'));
+          }, PACKAGE_DOWNLOAD_TIMEOUT_MS);
+        }),
+      ]);
+      if (!result?.uri || (result.status && result.status >= 400)) {
+        throw new Error(`Database package download failed with status ${result?.status || 'unknown'}.`);
+      }
+      clearTimeout(timer);
+      return result;
+    } catch (error) {
+      clearTimeout(timer);
+      lastError = error;
+      if (attempt < PACKAGE_DOWNLOAD_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
+    }
+  }
+
+  throw new Error(
+    `${lastError?.message || 'The database package download failed.'} Retry the update when your connection is stable.`,
+  );
+}
+
+async function installPreparedDatabase() {
+  try {
+    await performAtomicInstall({
+      removeBackup: () => deleteIfExists(BACKUP_ROOT),
+      activeExists: () => fileExists(DATABASE_ROOT),
+      moveActiveToBackup: () => FileSystem.moveAsync({ from: DATABASE_ROOT, to: BACKUP_ROOT }),
+      movePreparedToActive: () => FileSystem.moveAsync({ from: INSTALL_ROOT, to: DATABASE_ROOT }),
+      removeActive: () => deleteIfExists(DATABASE_ROOT),
+      backupExists: () => fileExists(BACKUP_ROOT),
+      restoreBackup: () => FileSystem.moveAsync({ from: BACKUP_ROOT, to: DATABASE_ROOT }),
+    });
+  } catch (error) {
+    throw new Error(`Database installation was rolled back: ${error?.message || error}`);
+  }
+}
+
+function loadPackagedDatabase(rootManifest, packagePayload) {
+  const byManufacturer = {};
+
+  for (const [manufacturerId, rootEntry] of Object.entries(rootManifest.manufacturers || {})) {
+    const manufacturerManifest = getPackagedJson(packagePayload, rootEntry.manifest);
+    validateManufacturerManifest(manufacturerManifest, manufacturerId);
+    const records = [];
+
+    for (const [modelId, modelEntry] of Object.entries(manufacturerManifest.models || {})) {
+      if (!modelEntry.manifest) {
+        const legacy = getPackagedJson(
+          packagePayload,
+          `database/vehicles/${manufacturerId}/${modelEntry.file || `${modelId}.json`}`,
+        );
+        records.push(...(legacy.records || []));
+        continue;
+      }
+
+      const modelManifestPath = `database/vehicles/${manufacturerId}/${modelEntry.manifest}`;
+      const modelManifest = getPackagedJson(packagePayload, modelManifestPath);
+      validateNestedModelManifest(modelManifest, manufacturerId, modelId);
+      const modelDirectory = modelManifestPath.slice(0, modelManifestPath.lastIndexOf('/') + 1);
+      const components = {};
+      for (const [componentId, reference] of Object.entries(modelManifest.files || {})) {
+        const file = typeof reference === 'string' ? reference : reference?.file;
+        components[componentId] = getPackagedJson(packagePayload, `${modelDirectory}${file}`);
+      }
+      records.push(...composeNestedModelRecords(manufacturerId, modelId, components));
+    }
+
+    byManufacturer[manufacturerId] = {
+      schema_version: manufacturerManifest.schema_version || '2.2',
+      manufacturer: manufacturerManifest.manufacturer,
+      records,
+    };
+  }
+
+  return { manifest: rootManifest, byManufacturer };
+}
+
+function getPackagedJson(packagePayload, path) {
+  const normalized = String(path || '').replace(/^\/+/, '').replace(/\\/g, '/');
+  const value = packagePayload.files?.[normalized];
+  if (!value || typeof value !== 'object') {
+    throw new Error(`Packaged database file is missing: ${normalized}`);
+  }
+  return value;
 }
 
 async function updateManufacturer(

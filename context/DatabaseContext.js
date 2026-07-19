@@ -25,6 +25,7 @@ export function DatabaseProvider({ children }) {
 
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(null);
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
@@ -71,24 +72,31 @@ export function DatabaseProvider({ children }) {
 
   const updateDatabase = useCallback(async () => {
     setUpdating(true);
+    setUpdateProgress({ stage: 'Checking for update' });
     setError('');
 
     try {
       const { remote, changed } = await checkForDatabaseUpdates();
 
       if (!changed.length) {
+        setUpdateProgress(null);
         return {
           updatedBrands: [],
           upToDate: true,
         };
       }
 
-      const updatedBrands = await downloadDatabaseUpdates(remote, changed);
+      setUpdateProgress({ stage: 'Update available' });
+      const result = await downloadDatabaseUpdates(
+        remote,
+        changed,
+        setUpdateProgress,
+      );
 
       await refresh();
 
       return {
-        updatedBrands,
+        ...result,
         upToDate: false,
       };
     } catch (updateError) {
@@ -101,6 +109,7 @@ export function DatabaseProvider({ children }) {
       throw updateError;
     } finally {
       setUpdating(false);
+      setTimeout(() => setUpdateProgress(null), 1200);
     }
   }, [refresh]);
 
@@ -136,6 +145,7 @@ export function DatabaseProvider({ children }) {
       byManufacturer: database.byManufacturer,
       loading,
       updating,
+      updateProgress,
       error,
       refresh,
       updateDatabase,
@@ -146,6 +156,7 @@ export function DatabaseProvider({ children }) {
       database,
       loading,
       updating,
+      updateProgress,
       error,
       refresh,
       updateDatabase,

@@ -22,6 +22,7 @@ export default function ManufacturersScreen({
     byManufacturer,
     loading,
     updating,
+    updateProgress,
     error,
     updateDatabase,
     clearError,
@@ -88,9 +89,13 @@ export default function ManufacturersScreen({
 
       Alert.alert(
         'Database updated',
-        result.updatedBrands?.length
-          ? `Updated manufacturers:\n\n${result.updatedBrands.join('\n')}`
-          : 'The database was updated successfully.',
+        [
+          `Version: ${result.databaseVersion || 'Current'}`,
+          `Manufacturers: ${result.summary?.manufacturers ?? manufacturers.length}`,
+          `Models: ${result.summary?.models ?? '—'}`,
+          `Vehicle records: ${result.summary?.vehicle_records ?? '—'}`,
+          `Package: ${formatMegabytes(result.packageSize)}`,
+        ].join('\n'),
       );
     } catch (updateError) {
       Alert.alert(
@@ -183,11 +188,28 @@ export default function ManufacturersScreen({
 
           <Text style={styles.updateButtonText}>
             {updating
-              ? 'Checking for updates…'
+              ? updateProgress?.stage || 'Checking for updates…'
               : 'Check database updates'}
           </Text>
         </View>
       </Pressable>
+
+      {updating && updateProgress?.stage === 'Downloading database' ? (
+        <View style={styles.progressBox}>
+          <Text style={styles.progressText}>
+            {formatMegabytes(updateProgress.downloadedBytes)} / {formatMegabytes(updateProgress.totalBytes)}{' '}
+            ({updateProgress.percentage || 0}%)
+          </Text>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${Math.max(0, Math.min(100, updateProgress.percentage || 0))}%` },
+              ]}
+            />
+          </View>
+        </View>
+      ) : null}
 
       {error ? (
         <Pressable
@@ -304,6 +326,10 @@ export default function ManufacturersScreen({
   );
 }
 
+function formatMegabytes(bytes) {
+  return `${((Number(bytes) || 0) / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -364,6 +390,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '900',
+  },
+  progressBox: {
+    marginHorizontal: 18,
+    marginTop: -5,
+    marginBottom: 15,
+  },
+  progressText: {
+    color: '#CBD5E1',
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  progressTrack: {
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#334155',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#60A5FA',
   },
   disabledButton: {
     opacity: 0.65,

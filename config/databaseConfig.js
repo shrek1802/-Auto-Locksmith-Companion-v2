@@ -17,6 +17,15 @@ export const LOCAL_MANIFEST_NAME =
 export const REQUEST_TIMEOUT_MS =
   30000;
 
+export const PACKAGE_DOWNLOAD_TIMEOUT_MS =
+  180000;
+
+export const PACKAGE_DOWNLOAD_RETRIES =
+  3;
+
+export const LEGACY_INDIVIDUAL_DOWNLOADS_ENABLED =
+  false;
+
 // Legacy aliases retained for any older imports.
 export const DATABASE_DIRECTORY_NAME =
   DATABASE_FOLDER_NAME;

@@ -8,11 +8,12 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "check": "node scripts/validate-data.js"
+    "check": "node scripts/validate-data.js",
+    "test": "node scripts/test-database-package.js"
   },
   "dependencies": {
     "expo-font": "~12.0.10",
-    "@expo/vector-icons": "14.0.2",
+    "@expo/vector-icons": "^14.0.3",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
@@ -26,6 +27,7 @@
     "react-native-svg": "15.2.0",
     "simple-icons": "^16.25.0",
     "expo-file-system": "~17.0.1",
+    "expo-crypto": "~13.0.2",
     "expo-updates": "~0.25.27"
   },
   "devDependencies": {}
