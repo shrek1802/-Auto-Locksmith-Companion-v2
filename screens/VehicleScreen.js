@@ -78,7 +78,24 @@ export default function VehicleScreen({ route }) {
 
   const vehicle = record.vehicle || {};
   const vehicleInformation = record.vehicle_information || {};
-  const keyInformation = record.key_information || vehicleInformation || {};
+  const keyInformation = {
+    ...(vehicleInformation || {}),
+    ...(record.key_information || {}),
+    technology_family:
+      record.key_information?.technology_family ||
+      vehicleInformation.technology_family ||
+      record.key_information?.transponder_type ||
+      vehicleInformation.transponder_type,
+    chip_ic:
+      record.key_information?.chip_ic ||
+      vehicleInformation.chip_ic ||
+      vehicleInformation.chip_or_ic,
+    frequency:
+      record.key_information?.frequency ||
+      vehicleInformation.frequency ||
+      record.key_information?.frequency_mhz ||
+      vehicleInformation.frequency_mhz,
+  };
   const operations = buildVehicleOperations(record, ownedTools, showOnlyOwnedTools);
   const security = record.security || {
     family: vehicleInformation.immobiliser_system,
@@ -134,8 +151,8 @@ export default function VehicleScreen({ route }) {
             {vehicle.ignition_type ? (
               <Badge text={vehicle.ignition_type} />
             ) : null}
-            {keyInformation.transponder_type ? (
-              <Badge text={keyInformation.transponder_type} />
+            {keyInformation.transponder_id ? (
+              <Badge text={displayKeyValue(keyInformation.transponder_id)} />
             ) : null}
           </View>
         </View>
@@ -245,16 +262,14 @@ function renderActiveSection({
     case 'key_information':
       return (
         <View>
-          <InfoRow label="Key type" value={keyInformation.key_type} />
           <InfoRow label="Blade" value={keyInformation.blade_profile} />
-          <InfoRow
-            label="Transponder"
-            value={keyInformation.transponder_type}
-          />
-          <InfoRow
-            label="Frequency"
-            value={formatFrequency(keyInformation.frequency_mhz)}
-          />
+          <InfoRow label="Transponder" value={displayKeyValue(keyInformation.transponder_id)} />
+          <InfoRow label="Technology" value={displayKeyValue(keyInformation.technology_family)} />
+          <InfoRow label="Chip Type" value={displayKeyValue(keyInformation.chip_type)} />
+          <InfoRow label="Chip IC" value={displayKeyValue(keyInformation.chip_ic)} />
+          <InfoRow label="Remote" value={displayKeyValue(keyInformation.remote_configuration)} />
+          <InfoRow label="Frequency" value={formatKeyFrequency(keyInformation.frequency)} />
+          <InfoRow label="Key type" value={keyInformation.key_type} />
           <InfoRow label="Battery" value={keyInformation.battery} />
           <InfoRow label="Buttons" value={keyInformation.buttons} />
           <InfoRow
@@ -491,6 +506,20 @@ function formatFrequency(value) {
   return text.toLowerCase().includes('mhz')
     ? text
     : `${text} MHz`;
+}
+
+function displayKeyValue(value) {
+  if (!hasContent(value)) return 'Research Required';
+  const text = String(value).trim();
+  return ['research_required', 'unknown', 'verification_required'].includes(text.toLowerCase())
+    ? 'Research Required'
+    : text;
+}
+
+function formatKeyFrequency(value) {
+  const text = displayKeyValue(value);
+  if (text === 'Research Required') return text;
+  return text.toLowerCase().includes('mhz') ? text : `${text} MHz`;
 }
 
 function hasContent(value) {

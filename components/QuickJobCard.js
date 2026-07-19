@@ -6,14 +6,20 @@ export default function QuickJobCard({ record }) {
   const vehicleInfo = record?.vehicle_information || {};
   const programming = vehicleInfo.programming || {};
 
-  const key = record?.key_information || {
+  const key = {
     blade_profile: vehicleInfo.blade_profile,
     transponder_type: vehicleInfo.transponder_type,
     transponder_id: vehicleInfo.transponder_id,
+    technology_family: vehicleInfo.technology_family || vehicleInfo.transponder_type,
+    chip_type: vehicleInfo.chip_type,
+    chip_ic: vehicleInfo.chip_ic || vehicleInfo.chip_or_ic,
+    remote_configuration: vehicleInfo.remote_configuration,
+    frequency: vehicleInfo.frequency || vehicleInfo.frequency_mhz,
     immobiliser_generation: vehicleInfo.immobiliser_generation,
     frequency_mhz: vehicleInfo.frequency_mhz,
     key_type: vehicleInfo.key_type,
     immobiliser_system: vehicleInfo.immobiliser_system,
+    ...(record?.key_information || {}),
   };
 
   const security = record?.security || {
@@ -58,9 +64,12 @@ export default function QuickJobCard({ record }) {
       <View style={styles.content}>
         <View style={styles.grid}>
           <QuickValue label="Blade" value={key.blade_profile} />
-          <QuickValue label="Transponder" value={formatTransponder(key)} />
-          <QuickValue label="Frequency" value={formatFrequency(key.frequency_mhz)} />
-          <QuickValue label="Key type" value={key.key_type} />
+          <QuickValue label="Transponder" value={key.transponder_id} />
+          <QuickValue label="Technology" value={key.technology_family} />
+          <QuickValue label="Chip Type" value={key.chip_type} />
+          <QuickValue label="Chip IC" value={key.chip_ic} />
+          <QuickValue label="Remote" value={key.remote_configuration} />
+          <QuickValue label="Frequency" value={formatFrequency(key.frequency)} />
         </View>
 
         <View style={styles.operationBox}>
@@ -160,27 +169,6 @@ function onlineSummary(security, operations, programming) {
   return value || '';
 }
 
-function formatTransponder(key) {
-  const id = String(key?.transponder_id || '').toLowerCase();
-  const type = String(key?.transponder_type || '').trim();
-  const generation = String(key?.immobiliser_generation || '').trim();
-
-  if (id === 'nxp_hitag_pro' || /hitag pro|\bid47\b|\bid49\b/i.test(`${type} ${generation}`)) {
-    return 'NXP Original PCF7939FA 128-Bit HITAG Pro (ID47 / may read ID49)';
-  }
-  if (id === 'texas_4d63_80bit' && /dst80|80-bit|6f/i.test(`${type} ${generation}`)) {
-    return 'Texas 4D-63 80-Bit DST80 (ID63 / 6F)';
-  }
-  if (id === 'texas_4d63_40bit' || /4d-63.*40-bit/i.test(`${type} ${generation}`)) {
-    return 'Texas 4D-63 40-Bit';
-  }
-  if (id === 'texas_4d60') return 'Texas 4D-60 (ID60)';
-  if (id === 'texas_4c') return 'Texas 4C (ID4C)';
-  if (id === 'nxp_hitag2_id46') return 'NXP PCF7946 / HITAG2 ID46';
-  if (id === 'hitag_aes') return 'NXP HITAG AES 128-Bit';
-  return type || generation;
-}
-
 function firstWarning(record, addKey, allKeysLost) {
   const warnings = [
     typeof addKey === 'object' ? addKey?.warnings : null,
@@ -202,7 +190,7 @@ function formatFrequency(value) {
 }
 
 function display(value) {
-  return hasVerifiedContent(value) ? String(value) : 'To Be Verified';
+  return hasVerifiedContent(value) ? String(value) : 'Research Required';
 }
 
 function verifiedValue(value) {
