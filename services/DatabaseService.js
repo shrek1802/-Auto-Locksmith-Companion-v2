@@ -11,6 +11,7 @@ import {
 } from '../config/databaseConfig';
 
 const {
+  assembleDatabaseFromPackage,
   formatDownloadProgress,
   packageUpdateAvailable,
   performAtomicInstall,
@@ -26,6 +27,11 @@ const LOCAL_ROOT_MANIFEST_PATH =
 
 const LOCAL_PACKAGE_PATH =
   `${DATABASE_ROOT}database-package.json`;
+
+const INSTALLATION_MARKER_NAME = 'installation-valid.json';
+
+const LOCAL_INSTALLATION_MARKER_PATH =
+  `${DATABASE_ROOT}${INSTALLATION_MARKER_NAME}`;
 
 const INSTALL_ROOT =
   `${FileSystem.documentDirectory}${DATABASE_FOLDER_NAME}_install/`;
@@ -76,8 +82,12 @@ export async function loadDatabase() {
 
   if (await fileExists(LOCAL_PACKAGE_PATH)) {
     const packagePayload = await readJson(LOCAL_PACKAGE_PATH);
-    validateDatabasePackage(packagePayload, rootManifest);
-    return loadPackagedDatabase(rootManifest, packagePayload);
+    const summary = validateDatabasePackage(packagePayload, rootManifest);
+    const marker = await loadInstallationMarker();
+    if (!installationMarkerMatches(marker, rootManifest, summary)) {
+      await writeJsonAtomically(LOCAL_INSTALLATION_MARKER_PATH, createInstallationMarker(rootManifest, summary));
+    }
+    return assembleDatabaseFromPackage(packagePayload, rootManifest);
   }
 
   for (const [
@@ -111,7 +121,7 @@ export async function loadDatabase() {
   };
 }
 
-export async function checkForDatabaseUpdates() {
+export async function checkForDatabaseUpdates(forceRepair = false) {
   validateRemoteUrl();
 
   const remoteRootManifest =
@@ -125,9 +135,11 @@ export async function checkForDatabaseUpdates() {
   const localRootManifest =
     await loadLocalRootManifest();
 
+  const installedValid = forceRepair ? false : await validateInstalledPackage(localRootManifest);
+
   const changed = [];
 
-  if (!packageUpdateAvailable(remoteRootManifest, localRootManifest)) {
+  if (!packageUpdateAvailable(remoteRootManifest, localRootManifest, installedValid)) {
     return {
       remote: remoteRootManifest,
       local: localRootManifest,
@@ -149,10 +161,7 @@ export async function checkForDatabaseUpdates() {
     const manufacturerDirectory =
       `${DATABASE_ROOT}${manufacturerId}/`;
 
-    const localManufacturerManifestExists =
-      await fileExists(
-        `${manufacturerDirectory}manifest.json`,
-      );
+    const localManufacturerManifestExists = installedValid;
 
     const manufacturerChanged =
       !localEntry ||
@@ -227,12 +236,16 @@ export async function downloadDatabaseUpdates(
     } catch {
       throw new Error('The downloaded database package is not valid JSON.');
     }
-    validateDatabasePackage(packagePayload, remoteRootManifest);
+    const validatedSummary = validateDatabasePackage(packagePayload, remoteRootManifest);
 
     onProgress({ stage: 'Installing database' });
     await writeJsonAtomically(
       `${INSTALL_ROOT}${LOCAL_MANIFEST_NAME}`,
       { ...remoteRootManifest, database_source: 'packaged_remote' },
+    );
+    await writeJsonAtomically(
+      `${INSTALL_ROOT}${INSTALLATION_MARKER_NAME}`,
+      createInstallationMarker(remoteRootManifest, validatedSummary),
     );
     await installPreparedDatabase();
     onProgress({ stage: 'Update complete', percentage: 100 });
@@ -341,59 +354,52 @@ async function installPreparedDatabase() {
       removeActive: () => deleteIfExists(DATABASE_ROOT),
       backupExists: () => fileExists(BACKUP_ROOT),
       restoreBackup: () => FileSystem.moveAsync({ from: BACKUP_ROOT, to: DATABASE_ROOT }),
+      preserveBackup: true,
     });
   } catch (error) {
     throw new Error(`Database installation was rolled back: ${error?.message || error}`);
   }
 }
 
-function loadPackagedDatabase(rootManifest, packagePayload) {
-  const byManufacturer = {};
-
-  for (const [manufacturerId, rootEntry] of Object.entries(rootManifest.manufacturers || {})) {
-    const manufacturerManifest = getPackagedJson(packagePayload, rootEntry.manifest);
-    validateManufacturerManifest(manufacturerManifest, manufacturerId);
-    const records = [];
-
-    for (const [modelId, modelEntry] of Object.entries(manufacturerManifest.models || {})) {
-      if (!modelEntry.manifest) {
-        const legacy = getPackagedJson(
-          packagePayload,
-          `database/vehicles/${manufacturerId}/${modelEntry.file || `${modelId}.json`}`,
-        );
-        records.push(...(legacy.records || []));
-        continue;
-      }
-
-      const modelManifestPath = `database/vehicles/${manufacturerId}/${modelEntry.manifest}`;
-      const modelManifest = getPackagedJson(packagePayload, modelManifestPath);
-      validateNestedModelManifest(modelManifest, manufacturerId, modelId);
-      const modelDirectory = modelManifestPath.slice(0, modelManifestPath.lastIndexOf('/') + 1);
-      const components = {};
-      for (const [componentId, reference] of Object.entries(modelManifest.files || {})) {
-        const file = typeof reference === 'string' ? reference : reference?.file;
-        components[componentId] = getPackagedJson(packagePayload, `${modelDirectory}${file}`);
-      }
-      records.push(...composeNestedModelRecords(manufacturerId, modelId, components));
-    }
-
-    byManufacturer[manufacturerId] = {
-      schema_version: manufacturerManifest.schema_version || '2.2',
-      manufacturer: manufacturerManifest.manufacturer,
-      records,
-    };
+async function loadInstallationMarker() {
+  try {
+    return await readJson(LOCAL_INSTALLATION_MARKER_PATH);
+  } catch {
+    return null;
   }
-
-  return { manifest: rootManifest, byManufacturer };
 }
 
-function getPackagedJson(packagePayload, path) {
-  const normalized = String(path || '').replace(/^\/+/, '').replace(/\\/g, '/');
-  const value = packagePayload.files?.[normalized];
-  if (!value || typeof value !== 'object') {
-    throw new Error(`Packaged database file is missing: ${normalized}`);
+function createInstallationMarker(manifest, summary) {
+  return {
+    schema_version: '1.0',
+    database_version: manifest.database_version,
+    package_sha256: manifest.package_sha256,
+    counts: summary,
+    validated_at: new Date().toISOString(),
+  };
+}
+
+function installationMarkerMatches(marker, manifest, summary) {
+  return Boolean(
+    marker &&
+    marker.database_version === manifest.database_version &&
+    marker.package_sha256 === manifest.package_sha256 &&
+    ['manufacturers', 'models', 'vehicle_records'].every(
+      (field) => Number(marker.counts?.[field]) === Number(summary[field]),
+    )
+  );
+}
+
+async function validateInstalledPackage(localManifest) {
+  if (!(await fileExists(LOCAL_PACKAGE_PATH))) return false;
+  try {
+    const payload = await readJson(LOCAL_PACKAGE_PATH);
+    const summary = validateDatabasePackage(payload, localManifest);
+    const marker = await loadInstallationMarker();
+    return installationMarkerMatches(marker, localManifest, summary);
+  } catch {
+    return false;
   }
-  return value;
 }
 
 async function updateManufacturer(

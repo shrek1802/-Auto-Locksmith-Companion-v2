@@ -21,7 +21,7 @@ import {
 } from '../config/toolCatalog';
 
 export default function SettingsScreen() {
-  const { resetDatabase, loading, updating } = useDatabase();
+  const { resetDatabase, repairDatabase, loading, updating } = useDatabase();
   const [ownedTools, setOwnedTools] = useState([]);
   const [showOnlyOwnedTools, setShowOnlyOwnedTools] = useState(false);
   const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
@@ -96,6 +96,30 @@ export default function SettingsScreen() {
               Alert.alert('Database reset', 'Local database reset completed.');
             } catch (error) {
               Alert.alert('Reset failed', error?.message || 'The local database could not be reset.');
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleDatabaseRepair() {
+    Alert.alert(
+      'Repair database',
+      'Download and fully validate the current database again, even when the version number has not changed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Repair database',
+          onPress: async () => {
+            try {
+              const result = await repairDatabase();
+              Alert.alert(
+                'Database repaired',
+                `${result.summary?.manufacturers || 0} manufacturers, ${result.summary?.models || 0} models and ${result.summary?.vehicle_records || 0} vehicle records passed validation.`,
+              );
+            } catch (error) {
+              Alert.alert('Repair failed', error?.message || 'The database could not be repaired. The last valid installation was preserved.');
             }
           },
         },
@@ -193,6 +217,14 @@ export default function SettingsScreen() {
             Vehicle records are stored locally and updated from the database repository.
           </Text>
           <Pressable
+            style={[styles.primaryButton, (loading || updating) && styles.disabledButton]}
+            onPress={handleDatabaseRepair}
+            disabled={loading || updating}
+          >
+            <Text style={styles.primaryButtonText}>Repair / reinstall database</Text>
+          </Pressable>
+          <View style={styles.buttonSpacer} />
+          <Pressable
             style={[styles.secondaryButton, (loading || updating) && styles.disabledButton]}
             onPress={handleDatabaseReset}
             disabled={loading || updating}
@@ -251,6 +283,7 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#FFFFFF', fontWeight: '900' },
   secondaryButton: { minHeight: 48, borderRadius: 12, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', justifyContent: 'center', alignItems: 'center' },
   secondaryButtonText: { color: '#F8FAFC', fontWeight: '800' },
+  buttonSpacer: { height: 10 },
   disabledButton: { opacity: 0.6 },
   footer: { alignItems: 'center', paddingTop: 10 },
   footerTitle: { color: '#CBD5E1', fontWeight: '800' },

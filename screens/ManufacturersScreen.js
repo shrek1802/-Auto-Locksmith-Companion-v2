@@ -59,8 +59,9 @@ export default function ManufacturersScreen({
             manufacturerData?.manufacturer?.name ||
             manufacturerData?.name ||
             manufacturerId,
-          recordCount: records.length,
-          modelCount: modelNames.size,
+          recordCount: manufacturerData?.recordCount ?? records.length,
+          modelCount: manufacturerData?.modelCount ?? modelNames.size,
+          logo: manufacturerData?.logo || null,
         };
       })
       .filter((manufacturer) =>
@@ -294,6 +295,7 @@ export default function ManufacturersScreen({
           >
             <BrandLogo
               brand={item.name}
+              downloadedLogo={item.logo}
               size={96}
             />
 

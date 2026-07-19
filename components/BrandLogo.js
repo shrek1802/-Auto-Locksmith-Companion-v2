@@ -4,27 +4,54 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, {
-  Ellipse,
+import Svg, { SvgXml,
   Path,
-  Text as SvgText,
 } from 'react-native-svg';
+import {
+  siAstonmartin, siAudi, siBentley, siBmw, siChrysler, siCitroen,
+  siDacia, siDsautomobiles, siFerrari, siFiat, siFord, siHonda,
+  siHyundai, siJeep, siKia, siLamborghini, siMaserati, siMazda,
+  siMclaren, siMg, siMini, siMitsubishi, siNissan, siOpel,
+  siPeugeot, siPolestar, siPorsche, siRenault, siRollsroyce,
+  siSeat, siSkoda, siSmart, siSubaru, siSuzuki, siTesla,
+  siToyota, siVauxhall, siVolkswagen, siVolvo,
+} from 'simple-icons/icons';
 
-const BRAND_CONFIG = {
-  ford: {
-    backgroundColor: '#0B2E63',
-    borderColor: '#4A90E2',
-  },
+const { selectLogoSource } = require('../services/brandLogoCore');
+
+const BRAND_ICONS = {
+  astonmartin: siAstonmartin, audi: siAudi, bentley: siBentley, bmw: siBmw,
+  chrysler: siChrysler, citroen: siCitroen, dacia: siDacia,
+  ds: siDsautomobiles, dsautomobiles: siDsautomobiles, ferrari: siFerrari,
+  fiat: siFiat, ford: siFord, honda: siHonda, hyundai: siHyundai,
+  jeep: siJeep, kia: siKia, lamborghini: siLamborghini,
+  maserati: siMaserati, mazda: siMazda, mclaren: siMclaren, mg: siMg,
+  mini: siMini, mitsubishi: siMitsubishi, nissan: siNissan, opel: siOpel,
+  peugeot: siPeugeot, polestar: siPolestar, porsche: siPorsche,
+  renault: siRenault, rollsroyce: siRollsroyce, seat: siSeat,
+  skoda: siSkoda, smart: siSmart, subaru: siSubaru, suzuki: siSuzuki,
+  tesla: siTesla, toyota: siToyota, vauxhall: siVauxhall,
+  volkswagen: siVolkswagen, volvo: siVolvo,
 };
 
 export default function BrandLogo({
   brand,
+  downloadedLogo,
   size = 96,
 }) {
   const brandId = normaliseBrandName(brand);
-  const config = BRAND_CONFIG[brandId];
+  const icon = BRAND_ICONS[brandId];
+  const logoSource = selectLogoSource(downloadedLogo, icon);
 
-  if (brandId === 'ford') {
+  if (logoSource === 'downloaded') {
+    return (
+      <View style={[styles.tile, { width: size, height: size, borderRadius: Math.round(size * 0.23), backgroundColor: '#F8FAFC', borderColor: '#CBD5E1' }]}>
+        <SvgXml xml={downloadedLogo} width={Math.round(size * 0.76)} height={Math.round(size * 0.76)} />
+      </View>
+    );
+  }
+
+  if (logoSource === 'bundled') {
     return (
       <View
         style={[
@@ -33,16 +60,15 @@ export default function BrandLogo({
             width: size,
             height: size,
             borderRadius: Math.round(size * 0.23),
-            backgroundColor:
-              config.backgroundColor,
-            borderColor:
-              config.borderColor,
+            backgroundColor: '#F8FAFC',
+            borderColor: '#CBD5E1',
           },
         ]}
       >
         <View style={styles.topHighlight} />
 
-        <FordLogo
+        <CatalogueLogo
+          icon={icon}
           width={Math.round(size * 0.76)}
           height={Math.round(size * 0.48)}
         />
@@ -80,7 +106,8 @@ export default function BrandLogo({
   );
 }
 
-function FordLogo({
+function CatalogueLogo({
+  icon,
   width,
   height,
 }) {
@@ -88,48 +115,12 @@ function FordLogo({
     <Svg
       width={width}
       height={height}
-      viewBox="0 0 220 100"
-      accessibilityLabel="Ford logo"
+      viewBox="0 0 24 24"
+      accessibilityLabel={`${icon.title} logo`}
     >
-      <Ellipse
-        cx="110"
-        cy="50"
-        rx="103"
-        ry="43"
-        fill="#0057A8"
-        stroke="#FFFFFF"
-        strokeWidth="7"
-      />
-
-      <Ellipse
-        cx="110"
-        cy="50"
-        rx="92"
-        ry="34"
-        fill="none"
-        stroke="rgba(255,255,255,0.34)"
-        strokeWidth="2"
-      />
-
-      <SvgText
-        x="110"
-        y="61"
-        fill="#FFFFFF"
-        fontSize="39"
-        fontWeight="700"
-        fontStyle="italic"
-        textAnchor="middle"
-        letterSpacing="-1"
-      >
-        Ford
-      </SvgText>
-
       <Path
-        d="M61 67 C82 75, 139 75, 161 66"
-        fill="none"
-        stroke="rgba(255,255,255,0.42)"
-        strokeWidth="2.2"
-        strokeLinecap="round"
+        d={icon.path}
+        fill={`#${icon.hex}`}
       />
     </Svg>
   );

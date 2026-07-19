@@ -70,13 +70,13 @@ export function DatabaseProvider({ children }) {
     };
   }, []);
 
-  const updateDatabase = useCallback(async () => {
+  const updateDatabase = useCallback(async ({ forceRepair = false } = {}) => {
     setUpdating(true);
     setUpdateProgress({ stage: 'Checking for update' });
     setError('');
 
     try {
-      const { remote, changed } = await checkForDatabaseUpdates();
+      const { remote, changed } = await checkForDatabaseUpdates(forceRepair);
 
       if (!changed.length) {
         setUpdateProgress(null);
@@ -149,6 +149,7 @@ export function DatabaseProvider({ children }) {
       error,
       refresh,
       updateDatabase,
+      repairDatabase: () => updateDatabase({ forceRepair: true }),
       resetDatabase,
       clearError,
     }),
