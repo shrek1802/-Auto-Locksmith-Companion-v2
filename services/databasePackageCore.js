@@ -84,12 +84,72 @@ function parseYears(value) {
   };
 }
 
+function isResearchPlaceholder(value) {
+  if (value === undefined || value === null) return true;
+  const text = String(value).trim().toLowerCase().replace(/[_-]+/g, ' ');
+  return !text || [
+    'research required', 'unknown', 'not verified', 'not yet verified',
+    'verification required', 'awaiting verification',
+  ].includes(text);
+}
+
+function canonicalTransponderApplications(payload) {
+  const catalogue = payload.files?.['database/reference/uk_transponder_catalogue.json'];
+  return Object.values(catalogue?.items || {}).flatMap((family) =>
+    (family?.applications || []).map((application) => ({ family, application })),
+  );
+}
+
+function scopeMatches(definition, application) {
+  const expected = String(application.key_variant_scope || '').toLowerCase();
+  if (!expected) return true;
+  const actual = String(definition?.catalogue_split?.key_variant_scope || '').toLowerCase();
+  if (actual) return actual === expected;
+  const types = (definition?.key_variants || []).map((entry) => String(entry?.type || '').toLowerCase());
+  return types.some((type) => expected.includes(type) || type.includes(expected.replace(/_key$/, '')));
+}
+
+function canonicalApplicationMatches(manufacturerId, modelId, definition, application) {
+  if (String(application.manufacturer || '').toLowerCase() !== manufacturerId.toLowerCase()) return false;
+  if (String(application.model || '').toLowerCase() !== modelId.toLowerCase()) return false;
+  const identity = `${definition?.id || ''} ${definition?.name || ''}`.toLowerCase();
+  const chassis = String(application.generation_or_chassis || '').toLowerCase();
+  if (chassis && !identity.includes(chassis)) return false;
+  const years = parseYears(definition?.years || definition?.year_range);
+  if (application.year_from && (!years.year_from || years.year_from < Number(application.year_from))) return false;
+  if (application.year_to && (!years.year_to || years.year_to > Number(application.year_to))) return false;
+  return scopeMatches(definition, application);
+}
+
+function enrichFromCanonicalTransponder(record, definition, manufacturerId, modelId, applications) {
+  if (!isResearchPlaceholder(record.vehicle_information?.transponder_id)) return record;
+  const matches = applications.filter(({ application }) =>
+    canonicalApplicationMatches(manufacturerId, modelId, definition, application));
+  const canonicalIds = [...new Set(matches.map(({ family }) => family.canonical_id).filter(Boolean))];
+  if (canonicalIds.length !== 1) return record;
+  const family = matches[0].family;
+  const info = { ...record.vehicle_information, transponder_id: canonicalIds[0] };
+  if (!isResearchPlaceholder(family.technology_family)) info.technology_family = family.technology_family;
+  info.transponder_verification = {
+    status: family.status === 'verified' ? 'verified' : 'partially_verified',
+    confidence: family.confidence || 'medium',
+    canonical_transponder_family_id: family.id,
+    evidence: family.evidence || family.evidence_source_ids || [],
+    source: 'canonical UK transponder catalogue exact application',
+  };
+  return { ...record, vehicle_information: info };
+}
+
 function makeRecord(manufacturerId, manufacturerName, modelId, modelName, variantId, definition) {
   if (definition?.vehicle && typeof definition.vehicle === 'object') return definition;
   const years = parseYears(definition?.years || definition?.year_range);
   const variants = Array.isArray(definition?.key_variants)
     ? definition.key_variants.map((entry) => entry?.type).filter(Boolean)
     : [];
+  const information = { ...definition, ...(definition?.vehicle_information || {}) };
+  if (isResearchPlaceholder(information.immobiliser_system) && !isResearchPlaceholder(definition?.immobiliser_family)) {
+    information.immobiliser_system = definition.immobiliser_family;
+  }
   return {
     ...definition,
     record_id: definition?.record_id || `${manufacturerId}_${modelId}_${variantId}`,
@@ -104,8 +164,26 @@ function makeRecord(manufacturerId, manufacturerName, modelId, modelName, varian
       market: definition?.market || 'UK',
       drive_side: definition?.drive_side || 'RHD',
     },
-    vehicle_information: definition?.vehicle_information || { ...definition },
+    vehicle_information: information,
   };
+}
+
+function operationId(value) {
+  const id = String(value || '').toLowerCase();
+  if (['add_key', 'add-key', 'key_add'].includes(id)) return 'add_key';
+  if (['akl', 'all_keys_lost', 'all-keys-lost'].includes(id)) return 'all_keys_lost';
+  return id;
+}
+
+function operationsFromComponent(componentData) {
+  const entries = componentData?.procedures || componentData?.operations || [];
+  if (!Array.isArray(entries)) return null;
+  const operations = {};
+  for (const entry of entries) {
+    const id = operationId(entry?.id || entry?.name);
+    if (id) operations[id] = { ...entry };
+  }
+  return Object.keys(operations).length ? operations : null;
 }
 
 function selectComponentSection(componentData, variantId, recordId) {
@@ -121,6 +199,12 @@ function attachSections(record, components, variantId) {
   const result = { ...record };
   for (const [componentId, componentData] of Object.entries(components)) {
     if (componentId === 'models' || componentId === 'vehicles') continue;
+    if (componentId === 'procedures') {
+      const operations = operationsFromComponent(componentData);
+      if (operations) result.operations = { ...(result.operations || {}), ...operations };
+      result.procedures = componentData;
+      continue;
+    }
     const section = selectComponentSection(componentData, variantId, record.record_id);
     if (section !== undefined) result[componentId] = section;
   }
@@ -131,6 +215,7 @@ function assembleDatabaseFromPackage(payload, manifest) {
   const byManufacturer = {};
   let modelCount = 0;
   let recordCount = 0;
+  const transponderApplications = canonicalTransponderApplications(payload);
 
   for (const [manufacturerId, rootEntry] of Object.entries(manifest.manufacturers || {})) {
     const manufacturerManifest = getPackagedObject(payload, rootEntry.manifest);
@@ -173,7 +258,10 @@ function assembleDatabaseFromPackage(payload, manifest) {
       const modelName = modelsComponent.model || modelEntry.name || modelId;
       for (const [variantId, definition] of listDefinitions(modelsComponent)) {
         const record = makeRecord(manufacturerId, manufacturerName, modelId, modelName, variantId, definition);
-        records.push(attachSections(record, components, variantId));
+        const enriched = enrichFromCanonicalTransponder(
+          record, definition, manufacturerId, modelId, transponderApplications,
+        );
+        records.push(attachSections(enriched, components, variantId));
       }
     }
 
@@ -287,6 +375,7 @@ module.exports = {
   REQUIRED_KEY_FIELDS,
   assembleDatabaseFromPackage,
   countDefinitions,
+  isResearchPlaceholder,
   formatDownloadProgress,
   getPackagedObject,
   getPackagedAsset,

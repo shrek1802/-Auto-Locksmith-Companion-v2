@@ -20,6 +20,8 @@ const KEY_GENERATION_ONLY = new Set([
 
 const PLACEHOLDERS = new Set([
   'unknown',
+  'research required',
+  'research_required',
   'awaiting verification',
   'verification required',
   'not yet verified',
@@ -103,14 +105,14 @@ function normaliseRecordSections(record) {
     battery: preferred(info.battery, info.battery_type),
     buttons: preferred(info.buttons, info.button_count),
     emergency_blade: info.emergency_blade,
-    immobiliser_system: info.immobiliser_system,
+    immobiliser_system: preferred(info.immobiliser_system, info.immobiliser_family),
     oem_part_numbers: info.oem_part_numbers,
     aftermarket_references: info.aftermarket_references,
   });
 
   record.security = mergeSection(record.security, {
-    family: info.immobiliser_system,
-    system: info.immobiliser_system,
+    family: preferred(info.immobiliser_system, info.immobiliser_family),
+    system: preferred(info.immobiliser_system, info.immobiliser_family),
     platform: info.platform,
     programming_module: preferred(info.programming_module, programming.module),
     programming_route: programming.route,

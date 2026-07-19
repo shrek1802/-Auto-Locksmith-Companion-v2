@@ -18,12 +18,12 @@ export default function QuickJobCard({ record }) {
     immobiliser_generation: vehicleInfo.immobiliser_generation,
     frequency_mhz: vehicleInfo.frequency_mhz,
     key_type: vehicleInfo.key_type,
-    immobiliser_system: vehicleInfo.immobiliser_system,
+    immobiliser_system: vehicleInfo.immobiliser_system || vehicleInfo.immobiliser_family,
     ...(record?.key_information || {}),
   };
 
   const security = record?.security || {
-    family: vehicleInfo.immobiliser_system,
+    family: vehicleInfo.immobiliser_system || vehicleInfo.immobiliser_family,
     fdrs_requirement: vehicleInfo.fdrs_requirement,
     online_requirement:
       vehicleInfo.online_requirement ?? programming.online_requirement,
@@ -184,7 +184,7 @@ function firstWarning(record, addKey, allKeysLost) {
 }
 
 function formatFrequency(value) {
-  if (!hasContent(value)) return '';
+  if (!hasVerifiedContent(value)) return '';
   const text = String(value);
   return text.toLowerCase().includes('mhz') ? text : `${text} MHz`;
 }
@@ -216,6 +216,8 @@ function hasVerifiedContent(value) {
     const text = value.trim().toLowerCase();
     return ![
       'unknown',
+      'research required',
+      'research_required',
       'awaiting verification',
       'verification required',
       'not yet verified',

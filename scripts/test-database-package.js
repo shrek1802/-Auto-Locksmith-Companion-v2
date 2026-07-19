@@ -32,7 +32,16 @@ function fullFixture() {
     assets: { 'database/assets/manufacturer_logos/dacia.svg': '<svg viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>' },
     files: {
       'database/reference/uk_blade_catalogue.json': { items: {} },
-      'database/reference/uk_transponder_catalogue.json': { items: {} },
+      'database/reference/uk_transponder_catalogue.json': {
+        items: {
+          exact_dacia_application: {
+            id: 'exact_dacia_application', canonical_id: 'ID46',
+            technology_family: 'HITAG 2', status: 'catalogue_supported', confidence: 'high',
+            evidence: ['fixture_catalogue'],
+            applications: [{ manufacturer: 'dacia', model: 'model_2', generation_or_chassis: 'model_2' }],
+          },
+        },
+      },
       'database/reference/uk_chip_catalogue.json': { items: {} },
       'database/reference/key_profile_schema.json': { display_order: Object.keys(fields) },
     },
@@ -60,6 +69,11 @@ function fullFixture() {
     manifest.manufacturers[id] = { name: id, manifest: manufacturerPath };
     payload.files[manufacturerPath] = { manufacturer: { id, name: id }, models: manufacturerModels[id] };
   }
+  payload.files['database/vehicles/dacia/model_2/models.json'].generations[0].immobiliser_family = 'Verified fixture immobiliser family';
+  payload.files['database/vehicles/dacia/model_2/manifest.json'].files.procedures = 'procedures.json';
+  payload.files['database/vehicles/dacia/model_2/procedures.json'] = {
+    procedures: [{ id: 'add_key', method: 'Fixture Add Key method', status: 'partially_verified' }],
+  };
   manifest.manufacturers.dacia.logo = 'database/assets/manufacturer_logos/dacia.svg';
   payload.root_manifest = structuredClone(manifest);
   return { manifest, payload };
@@ -73,6 +87,10 @@ async function run() {
   const loaded = assembleDatabaseFromPackage(payload, manifest);
   assert.deepStrictEqual(loaded.summary, manifest.package_counts);
   assert(loaded.byManufacturer.dacia.records.length > 0, 'Dacia generations must load');
+  assert.strictEqual(loaded.byManufacturer.dacia.records[0].vehicle_information.transponder_id, 'ID46');
+  assert.strictEqual(loaded.byManufacturer.dacia.records[0].vehicle_information.technology_family, 'HITAG 2');
+  assert.strictEqual(loaded.byManufacturer.dacia.records[0].vehicle_information.immobiliser_system, 'Verified fixture immobiliser family');
+  assert.strictEqual(loaded.byManufacturer.dacia.records[0].operations.add_key.method, 'Fixture Add Key method');
   assert(loaded.byManufacturer.ford.records[0].vehicle_information, 'Ford details must load');
   assert(loaded.byManufacturer.cupra.records.length > 0, 'CUPRA generations must load');
   assert(loaded.byManufacturer.dacia.logo.startsWith('<svg'), 'downloaded logo must take precedence');
