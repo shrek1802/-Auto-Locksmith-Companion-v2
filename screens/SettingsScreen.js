@@ -20,7 +20,7 @@ import {
   TOOL_GROUPS,
 } from '../config/toolCatalog';
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ navigation }) {
   const { resetDatabase, repairDatabase, loading, updating } = useDatabase();
   const [ownedTools, setOwnedTools] = useState([]);
   const [showOnlyOwnedTools, setShowOnlyOwnedTools] = useState(false);
@@ -153,6 +153,16 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Knowledge Engine V3 Pilot</Text>
+          <Text style={styles.sectionDescription}>
+            Test the first live MQB48 dashboard decision and MQB 5D key selection rules.
+          </Text>
+          <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('KnowledgeEngine')}>
+            <Text style={styles.primaryButtonText}>Open Knowledge Engine test</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>My Tools</Text>
           <Text style={styles.sectionDescription}>
