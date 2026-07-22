@@ -37,6 +37,62 @@ export function buildMqb45Decision(engine, dashboardType) {
   };
 }
 
+export function buildMqb45JobWorkflow(engine, answers) {
+  const rule = engine?.decision_rules?.items?.decision_mqb45_job_workflow;
+  if (!rule) return null;
+
+  if (answers?.jobType === 'all_keys_lost') {
+    return {
+      status: 'not_verified',
+      title: 'No verified AKL workflow available',
+      why: rule.all_keys_lost?.why,
+      confidence: rule.all_keys_lost?.confidence || 'research_required',
+      warnings: ['Do not treat the Add Key route as an all-keys-lost procedure.'],
+      steps: [],
+      keys: [],
+    };
+  }
+
+  if (!answers?.workingKeyAvailable) {
+    return {
+      status: 'not_verified',
+      title: 'Working key required for this verified route',
+      why: 'The recorded workshop event was an Add Key job completed with a working key available.',
+      confidence: 'research_required',
+      warnings: ['Select All Keys Lost when no working key is available.'],
+      steps: [],
+      keys: [],
+    };
+  }
+
+  const branch = rule.add_key?.dashboard_branches?.[answers?.dashboardType];
+  if (!branch) return null;
+
+  const profiles = engine?.key_profiles?.items || {};
+  const procedureSteps = engine?.procedure_steps?.items || {};
+  const toolSupported = (rule.verified_tools || []).includes(answers?.toolId);
+
+  return {
+    status: toolSupported ? 'recommended' : 'tool_not_verified',
+    title: toolSupported ? 'Recommended MQB48 Add Key workflow' : 'Selected tool not workshop verified',
+    preferredMethod: branch.preferred_immo_method,
+    availableMethods: branch.available_immo_methods || [],
+    excludedMethods: branch.excluded_immo_methods || [],
+    why: toolSupported ? branch.why : 'This decision path is currently workshop verified only with the Autel IM508S.',
+    confidence: toolSupported ? branch.confidence : 'research_required',
+    warnings: [
+      ...(branch.warnings || []),
+      ...(!toolSupported ? ['Use this route as reference only until the selected tool has verified evidence.'] : []),
+    ],
+    steps: (branch.procedure_step_ids || []).map((id, index) => ({
+      id,
+      number: index + 1,
+      ...(procedureSteps[id] || { title: id }),
+    })),
+    keys: (branch.compatible_key_profile_ids || []).map((id) => ({ id, ...(profiles[id] || {}) })),
+  };
+}
+
 export function getKeyProfilesForPlatform(engine, platformId) {
   const profiles = engine?.key_profiles?.items || {};
   return Object.entries(profiles)
