@@ -15,6 +15,7 @@ import ModelsScreen from './screens/ModelsScreen';
 import ModelFamilyScreen from './screens/ModelFamilyScreen';
 import VehicleScreen from './screens/VehicleScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import KnowledgeEngineScreen from './screens/KnowledgeEngineScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -89,6 +90,12 @@ export default function App() {
                   : 'Vehicle details',
               };
             }}
+          />
+
+          <Stack.Screen
+            name="KnowledgeEngine"
+            component={KnowledgeEngineScreen}
+            options={{ title: 'Knowledge Engine V3' }}
           />
 
           <Stack.Screen
