@@ -93,6 +93,16 @@ export function buildMqb45JobWorkflow(engine, answers) {
   };
 }
 
+export function getPlatformVerification(engine, platformId) {
+  const profile = engine?.platform_profiles?.items?.[platformId];
+  if (!profile) return null;
+  return {
+    ...profile,
+    verifiedCapabilities: profile.verified_capabilities || [],
+    verificationGaps: profile.verification_gaps || [],
+  };
+}
+
 export function getKeyProfilesForPlatform(engine, platformId) {
   const profiles = engine?.key_profiles?.items || {};
   return Object.entries(profiles)
