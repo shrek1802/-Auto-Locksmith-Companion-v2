@@ -37,8 +37,21 @@ export function buildMqb45Decision(engine, dashboardType) {
   };
 }
 
+export function getKeyProfilesForPlatform(engine, platformId) {
+  const profiles = engine?.key_profiles?.items || {};
+  return Object.entries(profiles)
+    .filter(([, profile]) => Array.isArray(profile?.platform_ids) && profile.platform_ids.includes(platformId))
+    .map(([id, profile]) => ({ id, ...profile }));
+}
+
+export function getMqb48KeyOptions(engine) {
+  return getKeyProfilesForPlatform(engine, 'vag_mqb48_mqb45');
+}
+
 export function getMqb5dKeyOptions(engine) {
   const rule = engine?.decision_rules?.items?.decision_mqb5d_key_selection;
   const profiles = engine?.key_profiles?.items || {};
-  return (rule?.allowed_key_profile_ids || []).map((id) => ({ id, ...(profiles[id] || {}) }));
+  return (rule?.allowed_key_profile_ids || [])
+    .map((id) => ({ id, ...(profiles[id] || {}) }))
+    .filter((profile) => profile.platform_ids?.includes('vag_mqb_5d'));
 }
