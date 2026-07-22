@@ -52,16 +52,16 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean --non-interactive
 
-      - name: Build installable debug APK
+      - name: Build standalone release APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
       - name: Copy APK
         run: |
           mkdir -p output
-          cp android/app/build/outputs/apk/debug/app-debug.apk output/Locksmith-Knowledge-Engine-V3-Test.apk
+          cp android/app/build/outputs/apk/release/app-release.apk output/Locksmith-Knowledge-Engine-V3-Test.apk
 
       - name: Upload test APK
         uses: actions/upload-artifact@v4
