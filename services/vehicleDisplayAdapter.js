@@ -3,6 +3,8 @@ import {
   normaliseToolId,
 } from '../config/toolCatalog';
 
+const { normaliseLocksmithRecord } = require('./locksmithRecordAdapter');
+
 const LEGACY_ALIASES = {
   autel_im508s: 'autel_im508s_xp400_pro',
   autel_im508s_xp400: 'autel_im508s_xp400_pro',
@@ -12,14 +14,9 @@ const LEGACY_ALIASES = {
   lonsdor_k518: 'lonsdor_k518_pro',
 };
 
-const KEY_GENERATION_ONLY = new Set([
-  'xhorse_key_tool_max_pro',
-  'keydiy_kd_x4',
-  'keydiy_kd_max',
-]);
-
 const PLACEHOLDERS = new Set([
   'unknown',
+  'unverified',
   'research required',
   'research_required',
   'awaiting verification',
@@ -85,8 +82,12 @@ function mergeSection(primary, fallback) {
   return output;
 }
 
-function normaliseRecordSections(record) {
-  if (!record || typeof record !== 'object') return;
+function prepareRecord(record) {
+  return normaliseLocksmithRecord(record) || record || {};
+}
+
+function normaliseRecordSections(input) {
+  const record = prepareRecord(input);
   const info = record.vehicle_information || {};
   const programming = info.programming || {};
 
@@ -101,7 +102,6 @@ function normaliseRecordSections(record) {
     remote_configuration: info.remote_configuration,
     frequency: preferred(info.frequency, info.frequency_mhz),
     immobiliser_generation: info.immobiliser_generation,
-    frequency_mhz: info.frequency_mhz,
     battery: preferred(info.battery, info.battery_type),
     buttons: preferred(info.buttons, info.button_count),
     emergency_blade: info.emergency_blade,
@@ -122,8 +122,10 @@ function normaliseRecordSections(record) {
     gateway_requirement: preferred(info.gateway_requirement, info.sgw_requirement),
   });
 
-  const moduleFallback = preferred(info.modules, preferred(info.module_locations, info.locations));
-  record.modules = mergeSection(record.modules, moduleFallback);
+  record.modules = mergeSection(
+    record.modules,
+    preferred(info.modules, preferred(info.module_locations, info.locations)),
+  );
 
   const notesFallback = preferred(info.notes, preferred(info.job_notes, info.warnings));
   if (Array.isArray(notesFallback)) {
@@ -133,6 +135,8 @@ function normaliseRecordSections(record) {
   } else {
     record.notes = mergeSection(record.notes, notesFallback);
   }
+
+  return record;
 }
 
 function toolName(id) {
@@ -148,7 +152,7 @@ function collectToolIds(record) {
   const ids = [];
   const add = (value) => {
     const id = canonicalToolId(value);
-    if (id && TOOL_NAME_BY_ID[id] && !ids.includes(id)) ids.push(id);
+    if (id && !ids.includes(id)) ids.push(id);
   };
   [info.tool_ids, tools.tool_ids].forEach((list) => {
     if (Array.isArray(list)) list.forEach(add);
@@ -163,13 +167,15 @@ function normaliseOwnedTools(ownedTools) {
   return new Set((Array.isArray(ownedTools) ? ownedTools : []).map(canonicalToolId));
 }
 
-export function buildVehicleToolDisplay(record, ownedTools, showOnlyOwnedTools) {
+export function buildVehicleToolDisplay(input, ownedTools, showOnlyOwnedTools) {
+  const record = normaliseRecordSections(input);
   const info = record?.vehicle_information || {};
   const top = record?.tools || {};
   const owned = normaliseOwnedTools(ownedTools);
   const ids = collectToolIds(record);
   const visible = showOnlyOwnedTools ? ids.filter((id) => owned.has(id)) : ids;
   const output = {};
+
   const ownedNames = visible.filter((id) => owned.has(id)).map((id) => `✓ ${toolName(id)}`);
   const otherNames = visible.filter((id) => !owned.has(id)).map(toolName);
   if (ownedNames.length) output['Your listed tools (operation not implied)'] = ownedNames;
@@ -177,8 +183,20 @@ export function buildVehicleToolDisplay(record, ownedTools, showOnlyOwnedTools) 
   if (showOnlyOwnedTools && !ownedNames.length) {
     output['Your listed tools (operation not implied)'] = 'No selected tool is explicitly listed for this vehicle.';
   }
-  if (String(record?.vehicle?.make || '').toLowerCase() === 'ford') {
-    output['Tool safety'] = 'A listed tool is not proof of Add Key or All Keys Lost support. Check the operation-specific tool status, exact build/security platform and current software before accepting the job.';
+
+  if (record.tool_support && typeof record.tool_support === 'object') {
+    Object.entries(record.tool_support).forEach(([id, support]) => {
+      if (!support || typeof support !== 'object') return;
+      const canonical = canonicalToolId(id);
+      if (showOnlyOwnedTools && !owned.has(canonical)) return;
+      output[toolName(canonical || id)] = cleanValue({
+        supported: support.supported,
+        minimum_version: support.minimum_version,
+        adapters_required: support.adapters_required,
+        functions: support.functions,
+        notes: support.notes,
+      });
+    });
   }
 
   const connection = top.connection_or_adapter || top['Connection / cable'] || info.tool_or_cable_required;
@@ -186,11 +204,8 @@ export function buildVehicleToolDisplay(record, ownedTools, showOnlyOwnedTools) 
   const online = top.online_requirement || top['Online / FDRS'] || info.programming?.online_requirement;
   if (hasValue(connection)) output['Connection / cable'] = connection;
   if (hasValue(route)) output['Programming route'] = route;
-  if (hasValue(online)) output['Online / FDRS'] = online;
-  const securityAccess = info.security_access || info.programming?.security_access || record?.security?.security_access;
-  if (hasValue(securityAccess)) output['Security access'] = securityAccess;
-  if (hasValue(info.battery_type)) output['Key battery'] = info.battery_type;
-  return output;
+  if (hasValue(online)) output['Online requirement'] = online;
+  return cleanValue(output) || {};
 }
 
 function operationSource(record, operationId) {
@@ -201,38 +216,23 @@ function operationSource(record, operationId) {
   return hasValue(primary) ? primary : vehicleProgramming[operationId];
 }
 
-function operationToolMap(record, operation, ownedTools, showOnlyOwnedTools) {
+function operationToolMap(operation, ownedTools, showOnlyOwnedTools) {
   const owned = normaliseOwnedTools(ownedTools);
-  const explicit = operation && typeof operation === 'object' && !Array.isArray(operation) ? operation.tools : null;
+  const explicit = operation && typeof operation === 'object' && !Array.isArray(operation)
+    ? operation.tools
+    : null;
   const result = {};
   if (explicit && typeof explicit === 'object') {
     Object.entries(explicit).forEach(([rawId, value]) => {
       const id = canonicalToolId(rawId);
-      if (!TOOL_NAME_BY_ID[id] || (showOnlyOwnedTools && !owned.has(id))) return;
-      result[id] = {
+      if (showOnlyOwnedTools && !owned.has(id)) return;
+      result[id || rawId] = {
         ...(typeof value === 'object' ? value : { summary: String(value) }),
-        display_name: value?.display_name || toolName(id),
+        display_name: value?.display_name || toolName(id || rawId),
       };
     });
   }
-  // Safety: never infer operation support from record-level or manufacturer-level tool lists.
-  // Add Key / AKL tools must be explicitly defined on the operation itself.
   return result;
-}
-
-function isRestrictedSecurityRecord(record) {
-  const info = record?.vehicle_information || {};
-  const vehicle = record?.vehicle || {};
-  const text = [
-    info.immobiliser_system, info.immobiliser_generation, info.platform,
-    info.transponder_type, info.programming?.route, info.programming?.online_requirement,
-    info.security_access, vehicle.generation, vehicle.variant,
-  ].filter(Boolean).join(' ').toLowerCase();
-  const year = Number(vehicle.year_from || 0);
-  return year >= 2022 || [
-    'mqb49', 'mqb', 'meb', 'fdrs', 'can fd', 'can-fd', 'doip', 'sfd',
-    'online security', 'authorised online', 'shared volkswagen', 'volkswagen',
-  ].some((term) => text.includes(term));
 }
 
 function normaliseOperation(record, operationId, ownedTools, showOnlyOwnedTools) {
@@ -243,8 +243,8 @@ function normaliseOperation(record, operationId, ownedTools, showOnlyOwnedTools)
     ? raw
     : preferred(object.method, preferred(object.method_text, preferred(object.summary, object.procedure_summary)));
   const route = preferred(object.programming_method, preferred(object.route, vehicleProgramming.route));
-  const online = preferred(object.online_requirement, vehicleProgramming.online_requirement);
-  const tools = operationToolMap(record, object, ownedTools, showOnlyOwnedTools);
+  const online = preferred(object.online_requirement, preferred(object.online_required, vehicleProgramming.online_requirement));
+  const tools = operationToolMap(object, ownedTools, showOnlyOwnedTools);
   const explicitStatus = String(object.overall_status || object.status || '').toLowerCase();
   const validStatus = [
     'supported',
@@ -253,32 +253,33 @@ function normaliseOperation(record, operationId, ownedTools, showOnlyOwnedTools)
     'verification_required',
     'not_supported',
   ].includes(explicitStatus);
-  const meaningfulMethod = hasValue(methodText);
   return {
     ...cleanValue(object),
-    summary: meaningfulMethod ? methodText : undefined,
-    method_text: meaningfulMethod ? methodText : undefined,
+    summary: hasValue(methodText) ? methodText : undefined,
+    method_text: hasValue(methodText) ? methodText : undefined,
     programming_method: hasValue(route) ? route : undefined,
     online_requirement: hasValue(online) ? online : undefined,
     tools,
     overall_status: validStatus
       ? explicitStatus
-      : isRestrictedSecurityRecord(record)
-        ? (Object.keys(tools).length ? 'conditional' : 'verification_required')
-        : meaningfulMethod || Object.keys(tools).length
-          ? 'supported'
+      : object.supported === false
+        ? 'not_supported'
+        : object.supported === true
+          ? (object.online_required || object.dealer_key_required ? 'conditional' : 'supported')
           : 'verification_required',
   };
 }
 
-export function buildVehicleOperations(record, ownedTools, showOnlyOwnedTools) {
-  normaliseRecordSections(record);
+export function buildVehicleOperations(input, ownedTools, showOnlyOwnedTools) {
+  const record = normaliseRecordSections(input);
   const base = cleanValue(record?.operations || {}) || {};
   return {
     ...base,
+    spare_key: normaliseOperation(record, 'spare_key', ownedTools, showOnlyOwnedTools),
     add_key: normaliseOperation(record, 'add_key', ownedTools, showOnlyOwnedTools),
     all_keys_lost: normaliseOperation(record, 'all_keys_lost', ownedTools, showOnlyOwnedTools),
     remote_programming: cleanValue(base.remote_programming),
+    module_replacement: cleanValue(base.module_replacement),
     parameter_reset: cleanValue(base.parameter_reset),
   };
 }

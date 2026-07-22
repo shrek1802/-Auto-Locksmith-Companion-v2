@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "check": "node scripts/validate-data.js",
-    "test": "node scripts/test-database-package.js"
+    "test": "node scripts/test-database-package.js && node scripts/test-locksmith-record-adapter.js"
   },
   "dependencies": {
     "expo-font": "~12.0.10",
