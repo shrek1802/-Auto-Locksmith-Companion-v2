@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { buildMqb45JobWorkflow, loadKnowledgeEngine } from '../services/KnowledgeEngineService';
+import { buildMqb45JobWorkflow, getPlatformVerification, loadKnowledgeEngine } from '../services/KnowledgeEngineService';
 
 const JOB_TYPES = [
   { id: 'add_key', label: 'Add Key' },
@@ -47,6 +47,11 @@ export default function KnowledgeEngineScreen() {
     toolId,
   }), [engine, jobType, workingKeyAvailable, dashboardType, toolId]);
 
+  const verification = useMemo(
+    () => getPlatformVerification(engine, 'vag_mqb48_mqb45'),
+    [engine],
+  );
+
   if (loading && !engine) {
     return <SafeAreaView style={styles.safe}><View style={styles.centre}><ActivityIndicator size="large" color="#60A5FA" /><Text style={styles.muted}>Loading Locksmith Knowledge Engine…</Text></View></SafeAreaView>;
   }
@@ -58,6 +63,40 @@ export default function KnowledgeEngineScreen() {
         <Text style={styles.subtitle}>Guided UK auto-locksmith workflow using verified workshop evidence</Text>
 
         {error ? <View style={styles.error}><Text style={styles.errorText}>{error}</Text><Pressable onPress={() => load(true)}><Text style={styles.retry}>Retry</Text></Pressable></View> : null}
+
+        {verification ? (
+          <View style={styles.coverageCard}>
+            <View style={styles.coverageHeader}>
+              <View>
+                <Text style={styles.coverageTitle}>Platform verification</Text>
+                <Text style={styles.coverageDate}>Last verified: {verification.last_verified || 'Not recorded'}</Text>
+              </View>
+              <View style={styles.coverageCount}>
+                <Text style={styles.coverageCountValue}>{verification.verifiedCapabilities.length}</Text>
+                <Text style={styles.coverageCountLabel}>verified</Text>
+              </View>
+            </View>
+
+            <Text style={styles.coverageSectionTitle}>Verified now</Text>
+            {verification.verifiedCapabilities.map((item) => (
+              <View key={item.id} style={styles.coverageRow}>
+                <Text style={styles.coverageTick}>✓</Text>
+                <View style={styles.coverageTextBox}>
+                  <Text style={styles.coverageText}>{item.label}</Text>
+                  <Text style={styles.coverageMeta}>{formatText(item.confidence)}</Text>
+                </View>
+              </View>
+            ))}
+
+            <Text style={styles.coverageSectionTitle}>Still to verify</Text>
+            {verification.verificationGaps.map((item) => (
+              <View key={item.id} style={styles.gapRow}>
+                <Text style={styles.gapDot}>•</Text>
+                <Text style={styles.gapText}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <QuestionCard title="1. What job are you doing?" options={JOB_TYPES} selected={jobType} onSelect={setJobType} />
 
@@ -159,6 +198,22 @@ const styles = StyleSheet.create({
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   title: { color: '#F8FAFC', fontSize: 28, fontWeight: '900' },
   subtitle: { color: '#94A3B8', marginTop: 5, marginBottom: 16, lineHeight: 20 },
+  coverageCard: { backgroundColor: '#0F172A', borderWidth: 1, borderColor: '#1D4ED8', borderRadius: 17, padding: 15, marginBottom: 14 },
+  coverageHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
+  coverageTitle: { color: '#F8FAFC', fontSize: 18, fontWeight: '900' },
+  coverageDate: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
+  coverageCount: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#052E16', borderWidth: 1, borderColor: '#166534', alignItems: 'center', justifyContent: 'center' },
+  coverageCountValue: { color: '#86EFAC', fontSize: 20, fontWeight: '900' },
+  coverageCountLabel: { color: '#BBF7D0', fontSize: 10, fontWeight: '800' },
+  coverageSectionTitle: { color: '#BFDBFE', fontWeight: '900', marginTop: 5, marginBottom: 8 },
+  coverageRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 9 },
+  coverageTick: { color: '#4ADE80', fontSize: 17, fontWeight: '900', width: 24 },
+  coverageTextBox: { flex: 1 },
+  coverageText: { color: '#E2E8F0', lineHeight: 19 },
+  coverageMeta: { color: '#86EFAC', fontSize: 11, marginTop: 3 },
+  gapRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 7 },
+  gapDot: { color: '#FBBF24', width: 20, fontSize: 18, lineHeight: 18 },
+  gapText: { color: '#FDE68A', flex: 1, lineHeight: 18 },
   card: { backgroundColor: '#111827', borderWidth: 1, borderColor: '#253047', borderRadius: 16, padding: 16, marginBottom: 14 },
   cardTitle: { color: '#F8FAFC', fontSize: 17, fontWeight: '900', marginBottom: 11 },
   option: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: '#334155', backgroundColor: '#0F172A', justifyContent: 'center', paddingHorizontal: 13, marginBottom: 9 },
