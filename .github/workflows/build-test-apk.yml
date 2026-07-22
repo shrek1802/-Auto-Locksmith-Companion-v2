@@ -2,19 +2,6 @@ name: Build Test APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'App.js'
-      - 'app.json'
-      - 'package.json'
-      - 'components/**'
-      - 'config/**'
-      - 'context/**'
-      - 'screens/**'
-      - 'services/**'
-      - 'scripts/**'
-      - '.github/workflows/build-test-apk.yml'
 
 permissions:
   contents: read
